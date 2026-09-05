@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Pressable, ScrollView, Switch, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -8,12 +8,18 @@ import { useStore } from '../../src/store';
 import { SKINS, buildTheme, useTheme, space, radius } from '../../src/theme';
 import { formatTime } from '../../src/dates';
 import { Text } from '../../src/Txt';
+import { collectDiagnostics, type Diagnostics } from '../../src/diagnostics';
 
 export default function CatScreen() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const { settings, updateSettings, forcePrompt } = useStore();
   const [showPicker, setShowPicker] = useState(Platform.OS === 'ios');
+  const [diag, setDiag] = useState<Diagnostics | null>(null);
+
+  useEffect(() => {
+    collectDiagnostics().then(setDiag);
+  }, [settings.hour, settings.minute, settings.notificationsOn]);
 
   const timeValue = (() => {
     const d = new Date();
@@ -107,6 +113,32 @@ export default function CatScreen() {
             />
           )}
         </Card>
+
+        <Card style={{ gap: space(1) }}>
+          <Text style={{ color: t.text, fontWeight: '700', fontSize: 15 }}>Nudge status</Text>
+          {diag ? (
+            <>
+              <Muted>Environment: {diag.executionEnvironment}</Muted>
+              <Muted>Module available: {String(diag.notificationsAvailable)}</Muted>
+              <Muted>Permission: {diag.permission}</Muted>
+              <Muted>Scheduled: {diag.scheduledCount}</Muted>
+              {diag.nextTrigger && <Muted>Trigger: {diag.nextTrigger}</Muted>}
+            </>
+          ) : (
+            <Muted>Checking…</Muted>
+          )}
+        </Card>
+
+        <AccentButton
+          label="Test notification (10s)"
+          onPress={async () => {
+            const Notifications = require('expo-notifications');
+            await Notifications.scheduleNotificationAsync({
+              content: { title: 'Test', body: 'If you see this, delivery works.' },
+              trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 10 },
+            });
+          }}
+        />
 
         <AccentButton label="Ask me about tomorrow now" onPress={forcePrompt} />
       </ScrollView>

@@ -14,7 +14,7 @@ export function installNotificationHandler() {
     handleNotification: async () => ({
       shouldShowBanner: true,
       shouldShowList: true,
-      shouldPlaySound: false,
+      shouldPlaySound: true,
       shouldSetBadge: false,
     }),
   });
@@ -25,9 +25,9 @@ export async function ensureAndroidChannel() {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync('tomorrow', {
     name: 'Tomorrow',
-    importance: Notifications.AndroidImportance.DEFAULT,
-    sound: null,
-    vibrationPattern: [0, 200],
+    importance: Notifications.AndroidImportance.HIGH,
+    vibrationPattern: [0, 250, 250, 250],
+    enableVibrate: true,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
   });
 }
@@ -42,9 +42,9 @@ export async function requestPermission(): Promise<boolean> {
 }
 
 const COPY = [
-  { title: 'So — tomorrow.', body: 'What are you up to?' },
-  { title: 'Cat wants to know', body: "What's the plan for tomorrow?" },
-  { title: 'One minute', body: 'Set up tomorrow before you forget it.' },
+  { title: 'Meow!.', body: 'Set up tomorrow before you forget it.' },
+  { title: 'Prr...', body: "What are you up to?" },
+  { title: 'Hooman...', body: 'Any plans for tomorrow?' },
 ];
 
 // schedule
