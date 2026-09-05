@@ -1,70 +1,49 @@
-import { SymbolView } from 'expo-symbols';
-import { Link, Tabs } from 'expo-router';
-import { Platform, Pressable } from 'react-native';
+import React from 'react';
+import { Tabs } from 'expo-router';
+import { StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTheme } from '../../src/theme';
+import { PixelIcon, ICONS } from '../../src/PixelIcon';
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
-
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function TabsLayout() {
+  const t = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
-              }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-          headerRight: () => (
-            <Link href="/modal" asChild>
-              <Pressable style={{ marginRight: 15 }}>
-                {({ pressed }) => (
-                  <SymbolView
-                    name={{ ios: 'info.circle', android: 'info', web: 'info' }}
-                    size={25}
-                    tintColor={Colors[colorScheme].text}
-                    style={{ opacity: pressed ? 0.5 : 1 }}
-                  />
-                )}
-              </Pressable>
-            </Link>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="two"
-        options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => (
-            <SymbolView
-              name={{
-                ios: 'chevron.left.forwardslash.chevron.right',
-                android: 'code',
-                web: 'code',
-              }}
-              tintColor={color}
-              size={28}
-            />
-          ),
-        }}
-      />
+        headerShown: false,
+        tabBarShowLabel: false,
+        tabBarStyle: {
+          backgroundColor: t.surface,
+          borderTopWidth: 2,
+          borderTopColor: t.hairline,
+          height: 56 + insets.bottom,
+          paddingTop: 10,
+          paddingBottom: insets.bottom,
+        },
+      }}
+    >
+      <Tabs.Screen name="index" options={{
+        tabBarIcon: ({ focused }) => (
+          <PixelIcon grid={ICONS.tomorrow} color={focused ? t.eye : t.muted} />
+        ),
+      }} />
+      <Tabs.Screen name="today" options={{
+        tabBarIcon: ({ focused }) => (
+          <PixelIcon grid={ICONS.today} color={focused ? t.eye : t.muted} />
+        ),
+      }} />
+      <Tabs.Screen name="later" options={{
+        tabBarIcon: ({ focused }) => (
+          <PixelIcon grid={ICONS.later} color={focused ? t.eye : t.muted} />
+        ),
+      }} />
+      <Tabs.Screen name="cat" options={{
+        tabBarIcon: ({ focused }) => (
+          <PixelIcon grid={ICONS.cat} color={focused ? t.eye : t.muted} />
+        ),
+      }} />
     </Tabs>
   );
 }

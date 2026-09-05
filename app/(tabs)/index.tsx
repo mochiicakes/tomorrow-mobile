@@ -1,31 +1,39 @@
-import { StyleSheet } from 'react-native';
+import React from 'react';
+import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Screen, Title, Muted } from '../../src/ui';
+import { DayList } from '../../src/DayList';
+import { Cat } from '../../src/Cat';
+import { useTheme, space } from '../../src/theme';
+import { tomorrowKey, prettyDay } from '../../src/dates';
+import { useStore } from '../../src/store';
 
-import EditScreenInfo from '@/components/EditScreenInfo';
-import { Text, View } from '@/components/Themed';
+export default function TomorrowScreen() {
+  const t = useTheme();
+  const insets = useSafeAreaInsets();
+  const day = tomorrowKey();
+  const { tasksFor } = useStore();
+  const planned = tasksFor(day).length > 0;
 
-export default function TabOneScreen() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Tab One</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/(tabs)/index.tsx" />
-    </View>
+    <Screen>
+      {/* header */}
+      <View style={{
+        paddingTop: insets.top + space(1),
+        paddingHorizontal: space(2),
+        paddingBottom: space(2),
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}>
+        <View>
+          <Title>Tomorrow</Title>
+          <Muted>{prettyDay(day)}</Muted>
+        </View>
+        <Cat size={80} coat={t.coat} eye={t.accent} sleeping={planned} />
+      </View>
+
+      <DayList day={day} placeholder="Add something for tomorrow…" />
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  separator: {
-    marginVertical: 30,
-    height: 1,
-    width: '80%',
-  },
-});
