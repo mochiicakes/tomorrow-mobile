@@ -105,7 +105,7 @@ export default function AccountScreen() {
           </View>
 
           <View style={{ alignItems: 'center', paddingVertical: space(1) }}>
-            <Cat size={126} coat={t.coat} eye={t.eye} sleeping={!isGuest} />
+            <Cat size={126} coat={t.coat} eye={t.eye} pattern={t.pattern} marks={t.marks} sleeping={!isGuest} />
           </View>
 
           {isGuest && !configured ? (

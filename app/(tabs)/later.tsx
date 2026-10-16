@@ -8,6 +8,7 @@ import { useStore } from '../../src/store';
 import { useTheme, space } from '../../src/theme';
 import { dayKey, addDays, prettyDay, todayKey } from '../../src/dates';
 import { Pager } from '../../src/controls';
+import { MonthPicker } from '../../src/MonthPicker';
 
 const WINDOW = 14;
 
@@ -25,8 +26,21 @@ export default function LaterScreen() {
     [offset],
   );
 
+  const [picking, setPicking] = useState(false);
+
   const page = (delta: number) => {
     setOffset(o => o + delta);
+    scroller.current?.scrollTo({ x: 0, animated: false });
+  };
+
+  // jump the strip so the picked day leads it
+  const jumpTo = (key: string) => {
+    const [y, m, d] = key.split('-').map(Number);
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diff = Math.round((new Date(y, m - 1, d).getTime() - start.getTime()) / 86400000);
+    setSelected(key);
+    setOffset(diff);
     scroller.current?.scrollTo({ x: 0, animated: false });
   };
 
@@ -51,9 +65,16 @@ export default function LaterScreen() {
           label={monthLabel()}
           onPrev={() => page(-WINDOW)}
           onNext={() => page(WINDOW)}
-          onLabelPress={() => { setOffset(0); scroller.current?.scrollTo({ x: 0, animated: false }); }}
+          onLabelPress={() => setPicking(true)}
         />
       </View>
+
+      <MonthPicker
+        visible={picking}
+        selected={selected}
+        onPick={jumpTo}
+        onClose={() => setPicking(false)}
+      />
 
       {/* strip */}
       <View style={{ height: 78, marginTop: space(1.5) }}>

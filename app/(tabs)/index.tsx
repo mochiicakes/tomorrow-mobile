@@ -30,7 +30,7 @@ export default function TomorrowScreen() {
           <Title>Tomorrow</Title>
           <Muted>{prettyDay(day)}</Muted>
         </View>
-        <Cat size={80} coat={t.coat} eye={t.accent} sleeping={planned} />
+        <Cat size={80} coat={t.coat} eye={t.accent} pattern={t.pattern} marks={t.marks} sleeping={planned} />
       </View>
 
       <DayList day={day} placeholder="Add something for tomorrow…" />

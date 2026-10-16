@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Pressable, ViewStyle } from 'react-native';
 import { Text } from './Txt';
 import { useTheme, space } from './theme';
+import { PixelIcon, ICONS } from './PixelIcon';
 
 // toggle
 export function Toggle({
@@ -84,9 +85,31 @@ export function Pager({
       paddingHorizontal: space(2),
     }}>
       <Arrow dir="left" onPress={onPrev} />
-      <Pressable onPress={onLabelPress} disabled={!onLabelPress} hitSlop={8}>
+      {onLabelPress ? (
+        // tappable chip
+        <Pressable
+          onPress={onLabelPress}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}, open month picker`}
+          style={({ pressed }) => ({
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            height: 30,
+            paddingHorizontal: 10,
+            borderWidth: 2,
+            borderColor: t.eye,
+            backgroundColor: pressed ? t.raised : t.surface,
+          })}
+        >
+          <PixelIcon grid={ICONS.later} color={t.eye} size={12} />
+          <Text style={{ color: t.text, fontSize: 13 }}>{label}</Text>
+          <PixelIcon grid={ICONS.caret} color={t.muted} size={10} />
+        </Pressable>
+      ) : (
         <Text style={{ color: t.text, fontSize: 13 }}>{label}</Text>
-      </Pressable>
+      )}
       <Arrow dir="right" onPress={onNext} />
     </View>
   );

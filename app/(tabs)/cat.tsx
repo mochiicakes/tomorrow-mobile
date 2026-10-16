@@ -5,7 +5,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Screen, Title, Muted, Card, AccentButton } from '../../src/ui';
 import { Cat } from '../../src/Cat';
 import { useStore } from '../../src/store';
-import { SKINS, buildTheme, useTheme, space, radius } from '../../src/theme';
+import { SKINS, COAT_GROUPS, buildTheme, useTheme, space, radius } from '../../src/theme';
 import { formatTime } from '../../src/dates';
 import { Text } from '../../src/Txt';
 import { collectDiagnostics, type Diagnostics } from '../../src/diagnostics';
@@ -42,7 +42,7 @@ export default function CatScreen() {
 
         {/* portrait */}
         <View style={{ alignItems: 'center', paddingVertical: space(2) }}>
-          <Cat size={190} coat={t.coat} eye={t.accent} />
+          <Cat size={190} coat={t.coat} eye={t.accent} pattern={t.pattern} marks={t.marks} />
           <Text style={{ color: t.accent, fontWeight: '700', fontSize: 18, marginTop: space(1) }}>
             {SKINS.find(s => s.id === settings.skin)?.label}
           </Text>
@@ -53,7 +53,7 @@ export default function CatScreen() {
           <Text style={{ color: t.text, fontWeight: '700', fontSize: 16 }}>Coat</Text>
           <Muted>Each cat sets the whole app's colours.</Muted>
           <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
-            {SKINS.map(s => {
+            {COAT_GROUPS.flatMap(g => SKINS.filter(s => s.group === g)).map(s => {
               const active = s.id === settings.skin;
               const preview = buildTheme(s.id);
               return (
@@ -69,7 +69,7 @@ export default function CatScreen() {
                     borderWidth: active ? 3 : 1,
                     borderColor: active ? t.accent : t.hairline,
                   }}>
-                    <Cat size={46} coat={preview.coat} eye={preview.accent} />
+                    <Cat size={46} coat={preview.coat} eye={preview.accent} pattern={preview.pattern} marks={preview.marks} />
                   </View>
                   <Text style={{ fontSize: 11, color: active ? t.text : t.muted }}>{s.label}</Text>
                 </Pressable>

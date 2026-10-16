@@ -45,7 +45,7 @@ export function TomorrowPrompt() {
           gap: space(2),
         }}>
           <View style={{ alignItems: 'center', marginTop: -space(9) }}>
-            <Cat size={120} coat={t.coat} eye={t.accent} />
+            <Cat size={120} coat={t.coat} eye={t.accent} pattern={t.pattern} marks={t.marks} />
           </View>
 
           <Text style={{ color: t.text, fontSize: 26, fontWeight: '700', textAlign: 'center' }}>
