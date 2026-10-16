@@ -12,7 +12,7 @@ export type CatSkin = {
   hairline: string;
   coat: string;
   eye: string;
-  mouth: string;
+  mouth?: string;
   onAccent: string;
   isDark: boolean;
 };

@@ -9,15 +9,18 @@ import { SKINS, buildTheme, useTheme, space, radius } from '../../src/theme';
 import { formatTime } from '../../src/dates';
 import { Text } from '../../src/Txt';
 import { collectDiagnostics, type Diagnostics } from '../../src/diagnostics';
+import { sendTestNotification, notificationsAvailable } from '../../src/notifications';
+import { AccountPanel } from '../../src/AccountPanel';
 
 export default function CatScreen() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings, forcePrompt } = useStore();
+  const { settings, updateSettings, enableNudge, forcePrompt } = useStore();
   const [showPicker, setShowPicker] = useState(Platform.OS === 'ios');
   const [diag, setDiag] = useState<Diagnostics | null>(null);
 
   useEffect(() => {
+    if (!__DEV__) return;
     collectDiagnostics().then(setDiag);
   }, [settings.hour, settings.minute, settings.notificationsOn]);
 
@@ -81,7 +84,7 @@ export default function CatScreen() {
             <Text style={{ color: t.text, fontWeight: '700', fontSize: 16 }}>Daily nudge</Text>
             <Switch
               value={settings.notificationsOn}
-              onValueChange={v => updateSettings({ notificationsOn: v })}
+              onValueChange={v => (v ? enableNudge() : updateSettings({ notificationsOn: false }))}
               trackColor={{ true: t.accent, false: t.hairline }}
               thumbColor={t.surface}
             />
@@ -114,6 +117,8 @@ export default function CatScreen() {
           )}
         </Card>
 
+        {/* debug */}
+        {__DEV__ && (
         <Card style={{ gap: space(1) }}>
           <Text style={{ color: t.text, fontWeight: '700', fontSize: 15 }}>Nudge status</Text>
           {diag ? (
@@ -128,17 +133,17 @@ export default function CatScreen() {
             <Muted>Checking…</Muted>
           )}
         </Card>
+        )}
 
-        <AccentButton
-          label="Test notification (10s)"
-          onPress={async () => {
-            const Notifications = require('expo-notifications');
-            await Notifications.scheduleNotificationAsync({
-              content: { title: 'Test', body: 'If you see this, delivery works.' },
-              trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 10 },
-            });
-          }}
-        />
+        {__DEV__ && notificationsAvailable && (
+          <AccentButton
+            label="Test notification (10s)"
+            onPress={() => sendTestNotification()}
+          />
+        )}
+        
+        {/* account */}
+        <AccountPanel />
 
         <AccentButton label="Ask me about tomorrow now" onPress={forcePrompt} />
       </ScrollView>

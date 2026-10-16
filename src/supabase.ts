@@ -20,6 +20,7 @@ export const supabase = configured
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: Platform.OS === 'web',
+        flowType: 'pkce',
       },
     })
   : null;
@@ -30,16 +31,3 @@ AppState.addEventListener('change', state => {
   if (state === 'active') supabase.auth.startAutoRefresh();
   else supabase.auth.stopAutoRefresh();
 });
-
-//session
-export async function ensureSession() {
-  if (!supabase) return null;
-  const { data } = await supabase.auth.getSession();
-  if (data.session) return data.session.user.id;
-  const { data: anon, error } = await supabase.auth.signInAnonymously();
-  if (error) {
-    console.warn('[tomorrow] anonymous sign-in failed', error.message);
-    return null;
-  }
-  return anon.user?.id ?? null;
-}

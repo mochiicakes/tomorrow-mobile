@@ -2,20 +2,21 @@
   "expo": {
     "name": "Tomorrow",
     "slug": "tomorrow",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "scheme": "tomorrow",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.yourname.tomorrow",
+      "supportsTablet": false,
+      "bundleIdentifier": "com.mochiicakes.tomorrow",
       "infoPlist": {
-        "UIBackgroundModes": []
+        "UIBackgroundModes": [],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.yourname.tomorrow",
+      "package": "com.mochiicakes.tomorrow",
       "edgeToEdgeEnabled": true,
       "permissions": [
         "POST_NOTIFICATIONS",

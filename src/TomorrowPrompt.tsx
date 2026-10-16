@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Modal, View, KeyboardAvoidingView, Platform, Pressable,
 } from 'react-native';
-import { useStore } from './store';
+import { useStore, MAX_TASK_LENGTH } from './store';
 import { useTheme, space } from './theme';
 import { AccentButton, Field, Muted } from './ui';
 import { Cat } from './Cat';
@@ -12,7 +12,7 @@ import { Text } from '../src/Txt';
 // window
 export function TomorrowPrompt() {
   const t = useTheme();
-  const { shouldPrompt, dismissPrompt, addTask, settings } = useStore();
+  const { shouldPrompt, dismissPrompt, addTask, settings, enableNudge } = useStore();
   const [lines, setLines] = useState<string[]>(['']);
   const day = tomorrowKey();
 
@@ -25,6 +25,7 @@ export function TomorrowPrompt() {
   const save = () => {
     lines.forEach(l => addTask(l, day));
     setLines(['']);
+    if (settings.notificationsOn) enableNudge();
     dismissPrompt();
   };
 
@@ -60,6 +61,7 @@ export function TomorrowPrompt() {
                 value={l}
                 onChangeText={v => setLine(i, v)}
                 placeholder={i === 0 ? 'First thing…' : 'And…'}
+                maxLength={MAX_TASK_LENGTH}
                 returnKeyType="next"
                 onSubmitEditing={() => setLines(ls => [...ls, ''])}
                 blurOnSubmit={false}

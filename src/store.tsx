@@ -5,10 +5,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 import { todayKey, tomorrowKey } from './dates';
 import { scheduleDailyNudge } from './notifications';
-import { ensureSession } from './supabase';
-import { pushTasks, pushSettings, pullTasks, mergeTasks } from './sync';
+import { SKINS } from './theme';
+import { useAuth } from './auth';
+import { pushTasks, pushSettings, pullTasks, pullSettings, hasCursor, mergeTasks } from './sync';
 
 const KEY = 'tomorrow.state.v3';
+const LEGACY_PUSHED = 'tomorrow.pushedAt';
+export const MAX_TASK_LENGTH = 500;
 
 // types
 export type Task = {
@@ -19,6 +22,8 @@ export type Task = {
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
+  // local only: changed since the last successful push
+  dirty: boolean;
 };
 
 export type Settings = {
@@ -29,7 +34,9 @@ export type Settings = {
   lastPromptedFor: string | null;
 };
 
-type State = { tasks: Task[]; settings: Settings };
+type State = { tasks: Task[]; settings: Settings; settingsDirty: boolean };
+
+const SYNCED_SETTINGS: (keyof Settings)[] = ['skin', 'hour', 'minute', 'notificationsOn'];
 
 const DEFAULT: State = {
   tasks: [],
@@ -40,6 +47,7 @@ const DEFAULT: State = {
     notificationsOn: true,
     lastPromptedFor: null,
   },
+  settingsDirty: false,
 };
 
 type Store = {
@@ -53,6 +61,7 @@ type Store = {
   removeTask: (id: string) => void;
   moveToTomorrow: (id: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
+  enableNudge: () => void;
   shouldPrompt: boolean;
   dismissPrompt: () => void;
   forcePrompt: () => void;
@@ -74,27 +83,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [forced, setForced] = useState(false);
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   const hydrated = useRef(false);
-  const userId = useRef<string | null>(null);
-  const dirty = useRef<Set<string>>(new Set());
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const inFlight = useRef(false);
+  const { userId, ready: authReady } = useAuth();
 
   // load
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(KEY);
+        // Older builds tracked pushes with a timestamp. Mark everything dirty
+        // once so it is re-sent under the new scheme; upserts are idempotent.
+        const legacy = (await AsyncStorage.getItem(LEGACY_PUSHED)) !== null;
         if (raw) {
-          const parsed = JSON.parse(raw) as State;
+          const parsed = JSON.parse(raw) as Partial<State>;
           setState({
             tasks: (parsed.tasks ?? []).map(t => ({
               ...t,
               updatedAt: t.updatedAt ?? t.createdAt,
               deletedAt: t.deletedAt ?? null,
+              dirty: legacy || t.dirty === undefined ? true : t.dirty,
             })),
             settings: { ...DEFAULT.settings, ...(parsed.settings ?? {}) },
+            settingsDirty: parsed.settingsDirty ?? false,
           });
         }
+        if (legacy) await AsyncStorage.removeItem(LEGACY_PUSHED);
       } catch (e) {
         console.warn('[tomorrow] load failed', e);
       } finally {
@@ -112,52 +129,69 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     );
   }, [state]);
 
-  // reschedule
+  // reschedule - never prompts; enableNudge() does the asking
   useEffect(() => {
     if (!ready) return;
-    const { hour, minute, notificationsOn } = state.settings;
-    scheduleDailyNudge({ hour, minute, enabled: notificationsOn });
-  }, [ready, state.settings.hour, state.settings.minute, state.settings.notificationsOn]);
+    const { hour, minute, notificationsOn, skin } = state.settings;
+    const eye = SKINS.find(s => s.id === skin)?.eye;
+    scheduleDailyNudge({ hour, minute, enabled: notificationsOn, color: eye });
+  }, [ready, state.settings.hour, state.settings.minute, state.settings.notificationsOn, state.settings.skin]);
 
-  // clock
+  // clock - recomputes day keys and the prompt check
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 30_000);
     return () => clearInterval(t);
   }, []);
 
-const runSync = useRef(async () => {});
-runSync.current = async () => {
-  if (!userId.current) userId.current = await ensureSession();
-  if (!userId.current) return;
-
-  setSyncing(true);
-  try {
-    const raw = await AsyncStorage.getItem('tomorrow.pushedAt');
-    const pushedAt = raw ? Number(raw) : 0;
-
-    const toPush = state.tasks.filter(t => t.updatedAt > pushedAt);
-    if (toPush.length) {
-      const ok = await pushTasks(userId.current, toPush);
-      if (ok) {
-        const newest = Math.max(...toPush.map(t => t.updatedAt));
-        await AsyncStorage.setItem('tomorrow.pushedAt', String(newest));
+  const runSync = useRef(async () => {});
+  runSync.current = async () => {
+    if (!userId || inFlight.current) return;
+    inFlight.current = true;
+    setSyncing(true);
+    try {
+      // tasks: push
+      const toPush = stateRef.current.tasks.filter(t => t.dirty);
+      if (toPush.length && (await pushTasks(userId, toPush))) {
+        const sent = new Map(toPush.map(t => [t.id, t.updatedAt]));
+        // Leave anything edited during the push dirty for the next round.
+        setState(s => ({
+          ...s,
+          tasks: s.tasks.map(t =>
+            t.dirty && sent.get(t.id) === t.updatedAt ? { ...t, dirty: false } : t,
+          ),
+        }));
       }
-    }
 
-    await pushSettings(userId.current, state.settings);
+      // settings: adopt the account's on first sync unless edited locally
+      const first = !(await hasCursor());
+      if (first && !stateRef.current.settingsDirty) {
+        const remote = await pullSettings();
+        if (remote) {
+          setState(s => ({ ...s, settings: { ...s.settings, ...remote } }));
+        } else {
+          await pushSettings(userId, stateRef.current.settings);
+        }
+      } else if (stateRef.current.settingsDirty) {
+        const sent = stateRef.current.settings;
+        if (await pushSettings(userId, sent)) {
+          setState(s => (s.settings === sent ? { ...s, settingsDirty: false } : s));
+        }
+      }
 
-    const remote = await pullTasks();
-    if (remote && remote.length) {
-      setState(s => ({ ...s, tasks: mergeTasks(s.tasks, remote) }));
+      // tasks: pull
+      const remote = await pullTasks();
+      if (remote && remote.length) {
+        setState(s => ({ ...s, tasks: mergeTasks(s.tasks, remote) }));
+      }
+    } finally {
+      inFlight.current = false;
+      setSyncing(false);
     }
-  } finally {
-    setSyncing(false);
-  }
-};
+  };
 
   // sync
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !authReady || !userId) return;
     runSync.current();
     const sub = AppState.addEventListener('change', st => {
       if (st === 'active') runSync.current();
@@ -167,13 +201,7 @@ runSync.current = async () => {
       sub.remove();
       clearInterval(iv);
     };
-  }, [ready]);
-
-  // settings push
-  useEffect(() => {
-    if (!ready || !userId.current) return;
-    pushSettings(userId.current, state.settings);
-  }, [ready, state.settings.skin, state.settings.hour, state.settings.minute, state.settings.notificationsOn]);
+  }, [ready, authReady, userId]);
 
   const value = useMemo<Store>(() => {
     const { tasks, settings } = state;
@@ -186,7 +214,30 @@ runSync.current = async () => {
     const shouldPrompt =
       forced || (ready && pastNudgeTime && settings.lastPromptedFor !== todayKey());
 
-    const mark = (id: string) => dirty.current.add(id);
+    const edit = (id: string, patch: (t: Task) => Partial<Task>) =>
+      setState(s => ({
+        ...s,
+        tasks: s.tasks.map(t =>
+          t.id === id ? { ...t, ...patch(t), updatedAt: Date.now(), dirty: true } : t,
+        ),
+      }));
+
+    const updateSettings = (patch: Partial<Settings>) =>
+      setState(s => ({
+        ...s,
+        settings: { ...s.settings, ...patch },
+        settingsDirty:
+          s.settingsDirty ||
+          SYNCED_SETTINGS.some(k => k in patch && patch[k] !== s.settings[k]),
+      }));
+
+    const enableNudge = () => {
+      updateSettings({ notificationsOn: true });
+      const eye = SKINS.find(s => s.id === settings.skin)?.eye;
+      scheduleDailyNudge({
+        hour: settings.hour, minute: settings.minute, enabled: true, color: eye, ask: true,
+      });
+    };
 
     return {
       ready,
@@ -199,7 +250,7 @@ runSync.current = async () => {
           .filter(t => t.day === day)
           .sort((a, b) => Number(a.done) - Number(b.done) || a.createdAt - b.createdAt),
       addTask: (text, day) => {
-        const trimmed = text.trim();
+        const trimmed = text.trim().slice(0, MAX_TASK_LENGTH);
         if (!trimmed) return;
         const t: Task = {
           id: uid(),
@@ -209,47 +260,25 @@ runSync.current = async () => {
           createdAt: Date.now(),
           updatedAt: Date.now(),
           deletedAt: null,
+          dirty: true,
         };
-        mark(t.id);
+        // First task is the moment to ask about the daily nudge.
+        if (!tasks.length && settings.notificationsOn) enableNudge();
         setState(s => ({ ...s, tasks: [...s.tasks, t] }));
       },
-      toggleTask: id => {
-        mark(id);
-        setState(s => ({
-          ...s,
-          tasks: s.tasks.map(t =>
-            t.id === id ? { ...t, done: !t.done, updatedAt: Date.now() } : t,
-          ),
-        }));
-      },
-      removeTask: id => {
-        mark(id);
-        setState(s => ({
-          ...s,
-          tasks: s.tasks.map(t =>
-            t.id === id ? { ...t, deletedAt: Date.now(), updatedAt: Date.now() } : t,
-          ),
-        }));
-      },
-      moveToTomorrow: id => {
-        mark(id);
-        setState(s => ({
-          ...s,
-          tasks: s.tasks.map(t =>
-            t.id === id ? { ...t, day: tomorrowKey(), updatedAt: Date.now() } : t,
-          ),
-        }));
-      },
-      updateSettings: patch =>
-        setState(s => ({ ...s, settings: { ...s.settings, ...patch } })),
+      toggleTask: id => edit(id, t => ({ done: !t.done })),
+      removeTask: id => edit(id, () => ({ deletedAt: Date.now() })),
+      moveToTomorrow: id => edit(id, () => ({ day: tomorrowKey() })),
+      updateSettings,
+      enableNudge,
       dismissPrompt: () => {
         setForced(false);
-        setState(s => ({ ...s, settings: { ...s.settings, lastPromptedFor: todayKey() } }));
+        updateSettings({ lastPromptedFor: todayKey() });
       },
       forcePrompt: () => setForced(true),
       syncNow: () => { runSync.current(); },
     };
-  }, [state, ready, syncing, forced]);
+  }, [state, ready, syncing, forced, tick]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

@@ -10,6 +10,11 @@ create table if not exists public.tasks (
   deleted_at  timestamptz
 );
 
+-- length guard (matches MAX_TASK_LENGTH in src/store.tsx)
+alter table public.tasks drop constraint if exists tasks_text_length;
+alter table public.tasks add constraint tasks_text_length
+  check (char_length(text) between 1 and 500);
+
 create index if not exists tasks_user_day on public.tasks (user_id, day);
 create index if not exists tasks_user_updated on public.tasks (user_id, updated_at);
 
@@ -39,10 +44,12 @@ create policy "own settings" on public.settings
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
--- touch
+-- touch - the server owns updated_at on insert and update; the app's
+-- incremental pull cursor depends on it
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   new.updated_at = now();
@@ -52,10 +59,28 @@ $$;
 
 drop trigger if exists tasks_touch on public.tasks;
 create trigger tasks_touch
-  before update on public.tasks
+  before insert or update on public.tasks
   for each row execute function public.touch_updated_at();
 
 drop trigger if exists settings_touch on public.settings;
 create trigger settings_touch
-  before update on public.settings
+  before insert or update on public.settings
   for each row execute function public.touch_updated_at();
+
+-- account deletion - removes the caller; tasks and settings cascade
+create or replace function public.delete_account()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.delete_account() from public, anon;
+grant execute on function public.delete_account() to authenticated;

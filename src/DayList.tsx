@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, FlatList, Pressable, Keyboard } from 'react-native';
-import { useStore } from './store';
+import { useStore, MAX_TASK_LENGTH } from './store';
 import { useTheme, space } from './theme';
 import { Card, Check, Field, Muted } from './ui';
 import { Text } from '../src/Txt';
@@ -24,6 +24,7 @@ export function DayList({ day, placeholder }: { day: string; placeholder: string
           value={draft}
           onChangeText={setDraft}
           placeholder={placeholder}
+          maxLength={MAX_TASK_LENGTH}
           returnKeyType="done"
           onSubmitEditing={submit}
           blurOnSubmit={false}
