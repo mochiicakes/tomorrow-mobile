@@ -9,6 +9,8 @@ import { space } from '../src/theme';
 // this screen again with the same code. Codes are single-use, so remember them.
 const used = new Set<string>();
 
+const LINK_PROBLEM = 'This link has expired or was already used. Request a new one from the Account screen.';
+
 // link - lands here from confirmation and password-reset emails
 export default function AuthCallback() {
   const { code, type, error_description } = useLocalSearchParams<{
@@ -17,7 +19,8 @@ export default function AuthCallback() {
     error_description?: string;
   }>();
   const { completeLink } = useAuth();
-  const [failed, setFailed] = useState<string | null>(error_description ?? null);
+  // Fixed copy only: the link's own error text is attacker-controllable.
+  const [failed, setFailed] = useState<string | null>(error_description ? LINK_PROBLEM : null);
 
   useEffect(() => {
     if (!code || error_description) return;
@@ -28,7 +31,7 @@ export default function AuthCallback() {
     used.add(code);
     completeLink(code, type === 'recovery').then(ok => {
       if (ok) router.replace('/');
-      else setFailed('This link has expired or was already used.');
+      else setFailed(LINK_PROBLEM);
     });
   }, [code]);
 

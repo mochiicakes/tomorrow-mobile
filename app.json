@@ -19,6 +19,7 @@
     "android": {
       "package": "com.mochiicakes.tomorrow",
       "edgeToEdgeEnabled": true,
+      "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png",
@@ -36,7 +37,10 @@
         {
           "icon": "./assets/images/android-icon-monochrome.png",
           "color": "#F3C242",
-          "defaultChannel": "tomorrow-nudges"
+          "defaultChannel": "tomorrow-purr",
+          "sounds": [
+            "./assets/sounds/purr.wav"
+          ]
         }
       ],
       [
@@ -50,7 +54,8 @@
       ],
       "expo-status-bar",
       "@react-native-community/datetimepicker",
-      "expo-font"
+      "expo-font",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

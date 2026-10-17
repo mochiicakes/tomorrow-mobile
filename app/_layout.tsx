@@ -9,6 +9,8 @@ import { ThemeContext, buildTheme } from '../src/theme';
 import { installNotificationHandler, onNudgeTapped } from '../src/notifications';
 import { TomorrowPrompt } from '../src/TomorrowPrompt';
 import { NewPasswordPrompt } from '../src/NewPasswordPrompt';
+import { ToastHost } from '../src/toast';
+import { warn } from '../src/log';
 import { useFonts, Silkscreen_400Regular, Silkscreen_700Bold } from '@expo-google-fonts/silkscreen';
 
 installNotificationHandler();
@@ -16,7 +18,7 @@ installNotificationHandler();
 // crash screen - plain RN text so it works even if fonts or providers failed
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const t = buildTheme('mono');
-  if (__DEV__) console.warn('[tomorrow] crashed', error);
+  warn('crashed', error);
   return (
     <View style={{
       flex: 1, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center',
@@ -46,7 +48,7 @@ function Themed() {
 
   useEffect(() => onNudgeTapped(forcePrompt), []);
 
-  if (fontError) console.warn('[tomorrow] font load failed', fontError);
+  if (fontError) warn('font load failed', fontError);
   if (!ready || (!fontsLoaded && !fontError)) return null;
 
   return (
@@ -55,6 +57,7 @@ function Themed() {
       <Stack screenOptions={{ headerShown: false }} />
       <TomorrowPrompt />
       <NewPasswordPrompt />
+      <ToastHost />
     </ThemeContext.Provider>
   );
 }

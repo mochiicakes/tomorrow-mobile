@@ -4,17 +4,23 @@ import { useStore, MAX_TASK_LENGTH } from './store';
 import { useTheme, space } from './theme';
 import { Card, Check, Field, Muted } from './ui';
 import { Text } from '../src/Txt';
+import { showToast } from './toast';
 
 // list
 export function DayList({ day, placeholder }: { day: string; placeholder: string }) {
   const t = useTheme();
-  const { tasksFor, addTask, toggleTask, removeTask } = useStore();
+  const { tasksFor, addTask, toggleTask, removeTask, restoreTask } = useStore();
   const [draft, setDraft] = useState('');
   const items = tasksFor(day);
 
   const submit = () => {
     addTask(draft, day);
     setDraft('');
+  };
+
+  const remove = (id: string) => {
+    removeTask(id);
+    showToast({ message: 'Task deleted', action: { label: 'Undo', onPress: () => restoreTask(id) } });
   };
 
   return (
@@ -56,7 +62,12 @@ export function DayList({ day, placeholder }: { day: string; placeholder: string
             >
               {item.text}
             </Text>
-            <Pressable onPress={() => removeTask(item.id)} hitSlop={10}>
+            <Pressable
+              onPress={() => remove(item.id)}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${item.text}`}
+            >
               <Text style={{ color: t.muted, fontSize: 20, lineHeight: 20 }}>×</Text>
             </Pressable>
           </Card>

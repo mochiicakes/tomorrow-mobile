@@ -36,6 +36,14 @@ create table if not exists public.settings (
   updated_at        timestamptz not null default now()
 );
 
+-- range guards - the app never sends these, but the API is public
+alter table public.settings drop constraint if exists settings_hour_range;
+alter table public.settings add constraint settings_hour_range check (hour between 0 and 23);
+alter table public.settings drop constraint if exists settings_minute_range;
+alter table public.settings add constraint settings_minute_range check (minute between 0 and 59);
+alter table public.settings drop constraint if exists settings_skin_length;
+alter table public.settings add constraint settings_skin_length check (char_length(skin) between 1 and 40);
+
 alter table public.settings enable row level security;
 
 drop policy if exists "own settings" on public.settings;
@@ -66,6 +74,25 @@ drop trigger if exists settings_touch on public.settings;
 create trigger settings_touch
   before insert or update on public.settings
   for each row execute function public.touch_updated_at();
+
+-- quota - caps rows per user so one account can't fill the database
+create or replace function public.tasks_quota()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if (select count(*) from public.tasks where user_id = new.user_id) >= 20000 then
+    raise exception 'task limit reached' using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists tasks_quota on public.tasks;
+create trigger tasks_quota
+  before insert on public.tasks
+  for each row execute function public.tasks_quota();
 
 -- account deletion - removes the caller; tasks and settings cascade
 create or replace function public.delete_account()

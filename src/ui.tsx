@@ -43,19 +43,20 @@ export function Card({ children, style }: { children: React.ReactNode; style?: V
 }
 
 // buttons
-export function AccentButton({
-  label, onPress, style,
-}: { label: string; onPress: () => void; style?: ViewStyle }) {
+type ButtonProps = { label: string; onPress: () => void; style?: ViewStyle; disabled?: boolean };
+
+export function AccentButton({ label, onPress, style, disabled }: ButtonProps) {
   const t = useTheme();
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={({ pressed }) => [{
         backgroundColor: t.accent,
         borderRadius: radius.pill,
         paddingVertical: 15,
         alignItems: 'center',
-        opacity: pressed ? 0.8 : 1,
+        opacity: disabled ? 0.5 : pressed ? 0.8 : 1,
       }, style]}
     >
       <Text style={{ color: t.onAccent, fontWeight: '700', fontSize: 16 }}>{label}</Text>
@@ -63,20 +64,19 @@ export function AccentButton({
   );
 }
 
-export function GhostButton({
-  label, onPress, style,
-}: { label: string; onPress: () => void; style?: ViewStyle }) {
+export function GhostButton({ label, onPress, style, disabled }: ButtonProps) {
   const t = useTheme();
   return (
     <Pressable
       onPress={onPress}
+      disabled={disabled}
       style={({ pressed }) => [{
         borderRadius: radius.pill,
         paddingVertical: 15,
         alignItems: 'center',
         borderWidth: 1,
         borderColor: t.hairline,
-        opacity: pressed ? 0.6 : 1,
+        opacity: disabled ? 0.4 : pressed ? 0.6 : 1,
       }, style]}
     >
       <Text style={{ color: t.text, fontWeight: '600', fontSize: 16 }}>{label}</Text>

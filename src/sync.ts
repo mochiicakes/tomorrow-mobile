@@ -1,6 +1,7 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import type { Task, Settings } from './store';
+import { warn } from './log';
 
 const CURSOR = 'tomorrow.sync.cursor';
 const PAGE = 1000;
@@ -32,12 +33,18 @@ function fromRow(r: any): Task {
   };
 }
 
-// push - updated_at is set by the server trigger
-export async function pushTasks(userId: string, tasks: Task[]): Promise<boolean> {
-  if (!supabase) return false;
-  if (!tasks.length) return true;
+// Postgres class 22 (bad data) and 23 (constraint) errors won't fix themselves on retry
+const isPermanent = (code?: string) => Boolean(code && /^2[23]/.test(code));
 
-  const rows = tasks.map(t => ({
+export type PushResult = { pushed: string[]; rejected: string[] };
+
+// push - updated_at is set by the server trigger. Returns null when the whole
+// push failed (offline, server down) and should be retried later.
+export async function pushTasks(userId: string, tasks: Task[]): Promise<PushResult | null> {
+  if (!supabase) return null;
+  if (!tasks.length) return { pushed: [], rejected: [] };
+
+  const toRow = (t: Task) => ({
     id: t.id,
     user_id: userId,
     text: t.text,
@@ -45,14 +52,23 @@ export async function pushTasks(userId: string, tasks: Task[]): Promise<boolean>
     done: t.done,
     created_at: new Date(t.createdAt).toISOString(),
     deleted_at: t.deletedAt ? new Date(t.deletedAt).toISOString() : null,
-  }));
+  });
 
-  const { error } = await supabase.from('tasks').upsert(rows, { onConflict: 'id' });
-  if (error) {
-    console.warn('[tomorrow] push failed', error.message);
-    return false;
+  const { error } = await supabase.from('tasks').upsert(tasks.map(toRow), { onConflict: 'id' });
+  if (!error) return { pushed: tasks.map(t => t.id), rejected: [] };
+  warn('push failed', error.code, error.message);
+  if (!isPermanent(error.code)) return null;
+
+  // One bad row fails the whole batch. Send rows one by one so the good ones
+  // land and the bad ones stop blocking every future sync.
+  const out: PushResult = { pushed: [], rejected: [] };
+  for (const t of tasks) {
+    const { error: e } = await supabase.from('tasks').upsert(toRow(t), { onConflict: 'id' });
+    if (!e) out.pushed.push(t.id);
+    else if (isPermanent(e.code)) out.rejected.push(t.id);
+    else return out.pushed.length ? out : null;
   }
-  return true;
+  return out;
 }
 
 export async function pushSettings(userId: string, s: Settings): Promise<boolean> {
@@ -68,7 +84,7 @@ export async function pushSettings(userId: string, s: Settings): Promise<boolean
     { onConflict: 'user_id' },
   );
   if (error) {
-    console.warn('[tomorrow] settings push failed', error.message);
+    warn('settings push failed', error.message);
     return false;
   }
   return true;
@@ -78,7 +94,7 @@ export async function pullSettings(): Promise<Partial<Settings> | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.from('settings').select('*').maybeSingle();
   if (error) {
-    console.warn('[tomorrow] settings pull failed', error.message);
+    warn('settings pull failed', error.message);
     return null;
   }
   if (!data) return null;
@@ -108,7 +124,7 @@ export async function pullTasks(): Promise<Task[] | null> {
 
     const { data, error } = await q;
     if (error) {
-      console.warn('[tomorrow] pull failed', error.message);
+      warn('pull failed', error.message);
       return null;
     }
     if (!data?.length) break;

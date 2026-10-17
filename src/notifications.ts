@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { warn } from './log';
 
 const isExpoGo = Constants.executionEnvironment === 'storeClient';
 export const notificationsAvailable = !(isExpoGo && Platform.OS === 'android');
@@ -10,8 +11,11 @@ const Notifications: typeof import('expo-notifications') | null =
 export const NUDGE_ID = 'daily-tomorrow-nudge';
 
 // Android locks a channel's sound once created, so a sound change needs a new id.
-const CHANNEL_ID = 'tomorrow-nudges';
-const OLD_CHANNEL_IDS = ['tomorrow'];
+const CHANNEL_ID = 'tomorrow-purr';
+const OLD_CHANNEL_IDS = ['tomorrow', 'tomorrow-nudges', 'tomorrow-daily'];
+
+// bundled via the expo-notifications `sounds` plugin option in app.json
+const SOUND = 'purr.wav';
 
 // handler
 export function installNotificationHandler() {
@@ -36,7 +40,7 @@ export async function ensureAndroidChannel() {
   await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
     name: 'Daily nudge',
     importance: Notifications.AndroidImportance.HIGH,
-    sound: 'default', // the phone's chosen notification tone
+    sound: SOUND,
     audioAttributes: {
       usage: Notifications.AndroidAudioUsage.NOTIFICATION,
       contentType: Notifications.AndroidAudioContentType.SONIFICATION,
@@ -57,7 +61,7 @@ export async function sendTestNotification(seconds = 10): Promise<boolean> {
     content: {
       title: 'Test',
       body: 'If you see this, delivery works.',
-      sound: 'default',
+      sound: SOUND,
       ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
     },
     trigger: {
@@ -84,6 +88,9 @@ const COPY = [
   { title: 'Hooman...', body: 'Any plans for tomorrow?' },
 ];
 
+// 'denied' can still be asked again; 'blocked' needs the system settings
+export type NudgeResult = 'scheduled' | 'off' | 'denied' | 'blocked' | 'unavailable' | 'failed';
+
 // schedule - one weekly trigger per weekday so the copy rotates.
 // Only asks for permission when `ask` is set; otherwise schedules if already granted.
 export async function scheduleDailyNudge(opts: {
@@ -92,16 +99,19 @@ export async function scheduleDailyNudge(opts: {
   enabled: boolean;
   color?: string;
   ask?: boolean;
-}) {
-  if (!Notifications) return;
+}): Promise<NudgeResult> {
+  if (!Notifications) return 'unavailable';
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
-    if (!opts.enabled) return;
+    if (!opts.enabled) return 'off';
 
     const ok = opts.ask
       ? await requestPermission()
       : (await Notifications.getPermissionsAsync()).granted;
-    if (!ok) return;
+    if (!ok) {
+      const { canAskAgain } = await Notifications.getPermissionsAsync();
+      return canAskAgain ? 'denied' : 'blocked';
+    }
     await ensureAndroidChannel();
 
     // weekday: 1 = Sunday … 7 = Saturday
@@ -113,7 +123,7 @@ export async function scheduleDailyNudge(opts: {
           title: copy.title,
           body: copy.body,
           data: { openPrompt: true },
-          sound: 'default',
+          sound: SOUND,
           ...(Platform.OS === 'android'
             ? { channelId: CHANNEL_ID, color: opts.color }
             : {}),
@@ -126,8 +136,10 @@ export async function scheduleDailyNudge(opts: {
         },
       });
     }
+    return 'scheduled';
   } catch (e) {
-    console.warn('[tomorrow] schedule failed', e);
+    warn('schedule failed', e);
+    return 'failed';
   }
 }
 

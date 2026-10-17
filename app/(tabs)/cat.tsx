@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable, ScrollView, Switch, Platform } from 'react-native';
+import { View, Pressable, ScrollView, Switch, Platform, Linking } from 'react-native';
+import { DANGER } from '../../src/toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Screen, Title, Muted, Card, AccentButton } from '../../src/ui';
@@ -15,7 +16,7 @@ import { AccountPanel } from '../../src/AccountPanel';
 export default function CatScreen() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings, enableNudge, forcePrompt } = useStore();
+  const { settings, updateSettings, enableNudge, forcePrompt, nudgeStatus } = useStore();
   const [showPicker, setShowPicker] = useState(Platform.OS === 'ios');
   const [diag, setDiag] = useState<Diagnostics | null>(null);
 
@@ -84,12 +85,24 @@ export default function CatScreen() {
             <Text style={{ color: t.text, fontWeight: '700', fontSize: 16 }}>Daily nudge</Text>
             <Switch
               value={settings.notificationsOn}
-              onValueChange={v => (v ? enableNudge() : updateSettings({ notificationsOn: false }))}
+              onValueChange={v => (v ? enableNudge({ explain: true }) : updateSettings({ notificationsOn: false }))}
               trackColor={{ true: t.accent, false: t.hairline }}
               thumbColor={t.surface}
             />
           </View>
           <Muted>The cat asks about tomorrow at this time, every day.</Muted>
+          {settings.notificationsOn && (nudgeStatus === 'denied' || nudgeStatus === 'blocked') && (
+            <Pressable onPress={() => Linking.openSettings().catch(() => {})}>
+              <Text style={{ color: DANGER, fontSize: 12 }}>
+                Notifications are blocked for Tomorrow, so the nudge can't ring. Tap to open Settings.
+              </Text>
+            </Pressable>
+          )}
+          {settings.notificationsOn && nudgeStatus === 'failed' && (
+            <Text style={{ color: DANGER, fontSize: 12 }}>
+              Couldn't schedule the nudge. Try changing the time again.
+            </Text>
+          )}
 
           <Pressable
             onPress={() => setShowPicker(s => (Platform.OS === 'ios' ? s : !s))}
