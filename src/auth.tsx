@@ -110,7 +110,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: { emailRedirectTo: Linking.createURL(CALLBACK) },
       });
       if (e) {
-        setError(e.message);
+        setError(/already registered/i.test(e.message)
+          ? 'That email already has an account. Try signing in instead.'
+          : e.message);
+        return false;
+      }
+      // With email confirmation on, Supabase doesn't error for a taken email —
+      // it returns a placeholder user with no identities.
+      if (data.user && data.user.identities?.length === 0) {
+        setError('That email already has an account. Try signing in instead.');
         return false;
       }
       if (!data.session) {

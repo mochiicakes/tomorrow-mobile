@@ -9,6 +9,10 @@ const Notifications: typeof import('expo-notifications') | null =
 
 export const NUDGE_ID = 'daily-tomorrow-nudge';
 
+// Android locks a channel's sound once created, so a sound change needs a new id.
+const CHANNEL_ID = 'tomorrow-nudges';
+const OLD_CHANNEL_IDS = ['tomorrow'];
+
 // handler
 export function installNotificationHandler() {
   if (!Notifications) return;
@@ -26,9 +30,17 @@ export function installNotificationHandler() {
 export async function ensureAndroidChannel() {
   if (!Notifications) return;
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync('tomorrow', {
-    name: 'Tomorrow',
+  for (const id of OLD_CHANNEL_IDS) {
+    await Notifications.deleteNotificationChannelAsync(id).catch(() => {});
+  }
+  await Notifications.setNotificationChannelAsync(CHANNEL_ID, {
+    name: 'Daily nudge',
     importance: Notifications.AndroidImportance.HIGH,
+    sound: 'default', // the phone's chosen notification tone
+    audioAttributes: {
+      usage: Notifications.AndroidAudioUsage.NOTIFICATION,
+      contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+    },
     vibrationPattern: [0, 250, 250, 250],
     enableVibrate: true,
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
@@ -45,7 +57,8 @@ export async function sendTestNotification(seconds = 10): Promise<boolean> {
     content: {
       title: 'Test',
       body: 'If you see this, delivery works.',
-      ...(Platform.OS === 'android' ? { channelId: 'tomorrow' } : {}),
+      sound: 'default',
+      ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -100,8 +113,9 @@ export async function scheduleDailyNudge(opts: {
           title: copy.title,
           body: copy.body,
           data: { openPrompt: true },
+          sound: 'default',
           ...(Platform.OS === 'android'
-            ? { channelId: 'tomorrow', color: opts.color }
+            ? { channelId: CHANNEL_ID, color: opts.color }
             : {}),
         },
         trigger: {

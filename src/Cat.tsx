@@ -83,7 +83,7 @@ export const PATTERNS = {
   calico: [
     ".....................",
     ".....................",
-    "....aa...............",
+    "....aa.........bb....",
     "...aaa........bbbb...",
     "...aaaa......bbbbb...",
     "...aaaa.......bbbb...",
@@ -94,9 +94,9 @@ export const PATTERNS = {
     ".....................",
     ".....................",
     ".....................",
-    "..............aaaa...",
-    "...bbb........aaaa...",
-    "...bbbb........aa....",
+    "................aa...",
+    "...bbb.........aaa...",
+    "...bbbb........aaa...",
     ".....bb..............",
     ".....................",
     ".....................",
@@ -238,7 +238,7 @@ export type PatternId = keyof typeof PATTERNS;
 // paths - one <Path> per colour (row runs merged) instead of one <Rect> per pixel
 function buildPaths(
   grid: string[],
-  colorAt: (ch: string, x: number, y: number) => string,
+  colorAt: (ch: string, x: number, y: number) => string
 ) {
   const paths = new Map<string, string>();
   const add = (color: string, x: number, y: number, w: number) =>
@@ -298,7 +298,11 @@ export const Cat = React.memo(function Cat({
   }, [grid, coat, eye, pupil, mouth, pattern, marksKey]);
 
   return (
-    <Svg width={size} height={(size * rows) / cols} viewBox={`0 0 ${cols} ${rows}`}>
+    <Svg
+      width={size}
+      height={(size * rows) / cols}
+      viewBox={`0 0 ${cols} ${rows}`}
+    >
       <Path d={silhouette} fill={coat} />
       {paths.map(([color, d]) => (
         <Path key={color} d={d} fill={color} />
