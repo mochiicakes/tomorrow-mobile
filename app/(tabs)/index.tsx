@@ -5,14 +5,13 @@ import { Screen, Title, Muted } from '../../src/ui';
 import { DayList } from '../../src/DayList';
 import { Cat } from '../../src/Cat';
 import { useTheme, space } from '../../src/theme';
-import { tomorrowKey, prettyDay } from '../../src/dates';
+import { prettyDay } from '../../src/dates';
 import { useStore } from '../../src/store';
 
 export default function TomorrowScreen() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const day = tomorrowKey();
-  const { tasksFor } = useStore();
+  const { tasksFor, tomorrow: day } = useStore();
   const planned = tasksFor(day).length > 0;
 
   return (

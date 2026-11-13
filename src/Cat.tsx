@@ -8,12 +8,13 @@ type Props = {
   pupil?: string;
   sleeping?: boolean;
   mouth?: string;
-  pattern?: PatternId;
+  // a preset id, or a custom overlay grid in the same format as PATTERNS
+  pattern?: PatternId | string[];
   marks?: string[];
 };
 
-// grid
-const AWAKE = [
+// grid - '#' cells are fur and the only ones a pattern may recolour
+export const CAT_GRID_AWAKE = [
   ".....................",
   ".....................",
   "....##.........##....",
@@ -35,7 +36,7 @@ const AWAKE = [
   ".....................",
 ];
 
-const ASLEEP = [
+export const CAT_GRID_ASLEEP = [
   ".....................",
   ".....................",
   "....##.........##....",
@@ -57,7 +58,7 @@ const ASLEEP = [
   ".....................",
 ];
 
-// patterns - 'a'/'b'/'c' recolour coat cells with marks[0]/[1]/[2]; eyes and mouth are never touched
+// patterns - 'a'..'j' recolour coat cells with marks[0]..[9]; eyes and mouth are never touched
 export const PATTERNS = {
   tabby: [
     ".....................",
@@ -270,24 +271,19 @@ export const Cat = React.memo(function Cat({
   pattern,
   marks = [],
 }: Props) {
-  const grid = sleeping ? ASLEEP : AWAKE;
+  const grid = sleeping ? CAT_GRID_ASLEEP : CAT_GRID_AWAKE;
   const cols = grid[0].length;
   const rows = grid.length;
   const marksKey = marks.join(",");
 
   const { silhouette, paths } = useMemo(() => {
-    const over = pattern ? PATTERNS[pattern] : undefined;
+    const over = typeof pattern === "string" ? PATTERNS[pattern] : pattern;
     const colorAt = (ch: string, x: number, y: number) => {
       if (ch === "y") return eye;
       if (ch === "p") return pupil;
       if (ch === "w") return mouth;
       const m = over?.[y]?.[x];
-      return (
-        (m === "a" && marks[0]) ||
-        (m === "b" && marks[1]) ||
-        (m === "c" && marks[2]) ||
-        coat
-      );
+      return (m && m !== "." && marks[m.charCodeAt(0) - 97]) || coat;
     };
     return {
       // solid coat underneath so anti-aliased seams between colours never show through

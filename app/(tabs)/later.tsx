@@ -6,7 +6,7 @@ import { Text } from '../../src/Txt';
 import { DayList } from '../../src/DayList';
 import { useStore } from '../../src/store';
 import { useTheme, space } from '../../src/theme';
-import { dayKey, addDays, prettyDay, todayKey } from '../../src/dates';
+import { dayKey, addDays, prettyDay } from '../../src/dates';
 import { Pager } from '../../src/controls';
 import { MonthPicker } from '../../src/MonthPicker';
 
@@ -15,7 +15,7 @@ const WINDOW = 14;
 export default function LaterScreen() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { tasksFor } = useStore();
+  const { tasksFor, today } = useStore();
   const scroller = useRef<ScrollView>(null);
 
   const [offset, setOffset] = useState(0);
@@ -23,7 +23,7 @@ export default function LaterScreen() {
 
   const days = useMemo(
     () => Array.from({ length: WINDOW }, (_, i) => addDays(new Date(), offset + i)),
-    [offset],
+    [offset, today],
   );
 
   const [picking, setPicking] = useState(false);
@@ -87,8 +87,8 @@ export default function LaterScreen() {
           {days.map(d => {
             const key = dayKey(d);
             const active = key === selected;
-            const isToday = key === todayKey();
-            const past = key < todayKey();
+            const isToday = key === today;
+            const past = key < today;
             const count = tasksFor(key).length;
             return (
               <Pressable

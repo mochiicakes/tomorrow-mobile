@@ -4,11 +4,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Title, Muted } from '../../src/ui';
 import { DayList } from '../../src/DayList';
 import { space } from '../../src/theme';
-import { todayKey, prettyDay } from '../../src/dates';
+import { prettyDay } from '../../src/dates';
+import { useStore } from '../../src/store';
 
 export default function TodayScreen() {
   const insets = useSafeAreaInsets();
-  const day = todayKey();
+  // from the store so the screen re-renders when the day rolls over
+  const { today: day } = useStore();
 
   return (
     <Screen>

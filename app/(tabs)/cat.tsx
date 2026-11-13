@@ -6,17 +6,18 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Screen, Title, Muted, Card, AccentButton } from '../../src/ui';
 import { Cat } from '../../src/Cat';
 import { useStore } from '../../src/store';
-import { SKINS, COAT_GROUPS, buildTheme, useTheme, space, radius } from '../../src/theme';
+import { router } from 'expo-router';
+import { SKINS, COAT_GROUPS, buildTheme, useTheme, space, radius, customSkinId } from '../../src/theme';
 import { formatTime } from '../../src/dates';
 import { Text } from '../../src/Txt';
 import { collectDiagnostics, type Diagnostics } from '../../src/diagnostics';
-import { sendTestNotification, notificationsAvailable } from '../../src/notifications';
+import { sendTestNotification, notificationsAvailable, nativeAlarmsAvailable } from '../../src/notifications';
 import { AccountPanel } from '../../src/AccountPanel';
 
 export default function CatScreen() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings, enableNudge, forcePrompt, nudgeStatus } = useStore();
+  const { settings, customCats, updateSettings, enableNudge, forcePrompt, nudgeStatus } = useStore();
   const [showPicker, setShowPicker] = useState(Platform.OS === 'ios');
   const [diag, setDiag] = useState<Diagnostics | null>(null);
 
@@ -45,15 +46,64 @@ export default function CatScreen() {
         <View style={{ alignItems: 'center', paddingVertical: space(2) }}>
           <Cat size={190} coat={t.coat} eye={t.accent} pattern={t.pattern} marks={t.marks} />
           <Text style={{ color: t.accent, fontWeight: '700', fontSize: 18, marginTop: space(1) }}>
-            {SKINS.find(s => s.id === settings.skin)?.label}
+            {t.label}
           </Text>
         </View>
 
-        {/* skins */}
+        {/* coat - new tile first, then the user's cats, then presets */}
         <Card style={{ gap: space(1.5) }}>
           <Text style={{ color: t.text, fontWeight: '700', fontSize: 16 }}>Coat</Text>
-          <Muted>Each cat sets the whole app's colours.</Muted>
+          <Muted>
+            {customCats.length
+              ? "Each cat sets the whole app's colours. Long-press one of yours to edit it."
+              : "Each cat sets the whole app's colours. Tap + to design your own."}
+          </Muted>
           <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
+            <Pressable
+              onPress={() => router.push('/cat-editor')}
+              accessibilityLabel="Design a new cat"
+              style={{ alignItems: 'center', gap: 6, width: 68 }}
+            >
+              <View style={{
+                width: 64, height: 64, borderRadius: 32,
+                alignItems: 'center', justifyContent: 'center',
+                borderWidth: 2, borderStyle: 'dashed', borderColor: t.hairline,
+              }}>
+                <Text style={{ color: t.muted, fontSize: 24 }}>+</Text>
+              </View>
+              <Text style={{ fontSize: 11, color: t.muted }}>New</Text>
+            </Pressable>
+
+            {customCats.map(c => {
+              const skinId = customSkinId(c.id);
+              const active = skinId === settings.skin;
+              const preview = buildTheme(skinId, customCats);
+              const edit = () => router.push({ pathname: '/cat-editor', params: { id: c.id } });
+              return (
+                <Pressable
+                  key={c.id}
+                  onPress={() => (active ? edit() : updateSettings({ skin: skinId }))}
+                  onLongPress={edit}
+                  accessibilityLabel={active ? `Edit ${c.name}` : `Wear ${c.name}`}
+                  accessibilityHint="Long-press to edit"
+                  style={{ alignItems: 'center', gap: 6, width: 68 }}
+                >
+                  <View style={{
+                    width: 64, height: 64, borderRadius: 32,
+                    backgroundColor: preview.bg,
+                    alignItems: 'center', justifyContent: 'center',
+                    borderWidth: active ? 3 : 1,
+                    borderColor: active ? t.accent : t.hairline,
+                  }}>
+                    <Cat size={46} coat={preview.coat} eye={preview.accent} pattern={preview.pattern} marks={preview.marks} />
+                  </View>
+                  <Text numberOfLines={1} style={{ fontSize: 11, color: active ? t.text : t.muted }}>
+                    {c.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+
             {COAT_GROUPS.flatMap(g => SKINS.filter(s => s.group === g)).map(s => {
               const active = s.id === settings.skin;
               const preview = buildTheme(s.id);
@@ -127,6 +177,28 @@ export default function CatScreen() {
                 if (date) updateSettings({ hour: date.getHours(), minute: date.getMinutes() });
               }}
             />
+          )}
+
+          {/* alarm sound - Spotify clips ring through the Android alarm service */}
+          {nativeAlarmsAvailable && (
+            <Pressable
+              onPress={() => router.push('/alarm-sound')}
+              accessibilityRole="button"
+              style={{
+                backgroundColor: t.raised, borderRadius: radius.md, padding: space(2),
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space(1),
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: t.text, fontSize: 14 }}>Alarm sound</Text>
+                <Muted style={{ fontSize: 12 }}>
+                  {settings.alarmSound
+                    ? `${settings.alarmSound.name} · ${((settings.alarmSound.endMs - settings.alarmSound.startMs) / 1000).toFixed(1)}s`
+                    : 'Purr'}
+                </Muted>
+              </View>
+              <Text style={{ color: t.muted, fontSize: 14 }}>{'>'}</Text>
+            </Pressable>
           )}
         </Card>
 

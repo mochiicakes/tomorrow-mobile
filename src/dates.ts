@@ -28,3 +28,15 @@ export function formatTime(hour: number, minute: number): string {
   d.setHours(hour, minute, 0, 0);
   return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
+
+export function msUntilMidnight(now: Date = new Date()): number {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return next.getTime() - now.getTime();
+}
+
+// epoch ms for 'HH:MM' local time on a day key
+export function atTime(key: string, hhmm: string): number {
+  const [y, m, d] = key.split('-').map(Number);
+  const [h, min] = hhmm.split(':').map(Number);
+  return new Date(y, m - 1, d, h, min, 0, 0).getTime();
+}

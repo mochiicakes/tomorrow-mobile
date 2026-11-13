@@ -38,6 +38,7 @@ export const useAuth = () => useContext(AuthContext);
 
 const LAST_USER = 'tomorrow.lastUserId';
 const CURSOR = 'tomorrow.sync.cursor';
+const CATS_CURSOR = 'tomorrow.sync.cats.cursor';
 const STATE = 'tomorrow.state.v3';
 const PUSHED = 'tomorrow.pushedAt';
 const CALLBACK = 'auth-callback';
@@ -85,7 +86,7 @@ export function friendlyAuthError(e: unknown): string {
 
 // wipe
 async function wipeLocalCache() {
-  await AsyncStorage.multiRemove([STATE, CURSOR, PUSHED, LAST_USER]);
+  await AsyncStorage.multiRemove([STATE, CURSOR, CATS_CURSOR, PUSHED, LAST_USER]);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

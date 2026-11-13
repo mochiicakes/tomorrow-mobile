@@ -1,0 +1,26 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.mochiicakes.tomorrow'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.tomorrowalarm"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+// the App Remote AAR ships as a local maven artifact; app.plugin.js adds the
+// same repo to the app project so the transitive dependency resolves there too
+repositories {
+  maven { url "${projectDir}/maven" }
+}
+
+dependencies {
+  implementation 'com.spotify.android:app-remote:0.8.0'
+  implementation 'com.google.code.gson:gson:2.11.0'
+}

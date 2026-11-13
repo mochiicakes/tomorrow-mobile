@@ -3,11 +3,12 @@ import {
   Modal, View, Platform, Pressable, ScrollView, Keyboard, LayoutAnimation, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePathname } from 'expo-router';
 import { useStore, MAX_TASK_LENGTH } from './store';
 import { useTheme, space } from './theme';
 import { AccentButton, Field, Muted } from './ui';
 import { Cat } from './Cat';
-import { tomorrowKey, prettyDay } from './dates';
+import { prettyDay } from './dates';
 import { Text } from '../src/Txt';
 
 // how far the cat pokes out above the sheet
@@ -37,15 +38,15 @@ function useKeyboardHeight() {
 export function TomorrowPrompt() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { shouldPrompt, dismissPrompt, addTask, settings, enableNudge } = useStore();
+  const { shouldPrompt, dismissPrompt, addTask, settings, enableNudge, tomorrow: day } = useStore();
   const [lines, setLines] = useState<string[]>(['']);
   const scroll = useRef<ScrollView>(null);
   const kb = useKeyboardHeight();
   const typing = kb > 0;
-  const day = tomorrowKey();
+  // the ringing alarm screen opens the prompt itself once dismissed
+  const onAlarm = usePathname() === '/alarm';
 
-
-  if (!shouldPrompt) return null;
+  if (!shouldPrompt || onAlarm) return null;
 
   const setLine = (i: number, v: string) =>
     setLines(ls => ls.map((l, idx) => (idx === i ? v : l)));
