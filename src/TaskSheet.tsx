@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal, View, Pressable, Platform, ScrollView } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { TimePicker } from './TimePicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from './store';
 import { useTheme, space } from './theme';
@@ -8,7 +8,7 @@ import { Muted, AccentButton } from './ui';
 import { Text } from './Txt';
 import { Toggle } from './controls';
 import { MonthCalendar } from './MonthPicker';
-import { showToast } from './toast';
+import { showToast, DANGER } from './toast';
 import { prettyDay, formatTime, atTime } from './dates';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -43,7 +43,7 @@ function Chip({ label, onPress, active = false }: { label: string; onPress: () =
 export function TaskSheet({ taskId, onClose }: { taskId: string | null; onClose: () => void }) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { tasks, today, tomorrow, moveTask, setReminder } = useStore();
+  const { tasks, today, tomorrow, moveTask, setReminder, removeTask, restoreTask } = useStore();
   const task = tasks.find(x => x.id === taskId) ?? null;
   const [picking, setPicking] = useState(false);
   const [showTime, setShowTime] = useState(false);
@@ -67,6 +67,12 @@ export function TaskSheet({ taskId, onClose }: { taskId: string | null; onClose:
     });
   };
 
+  const remove = () => {
+    removeTask(task.id);
+    onClose();
+    showToast({ message: 'Task deleted', action: { label: 'Undo', onPress: () => restoreTask(task.id) } });
+  };
+
   const toggleReminder = (on: boolean) => {
     if (!on) {
       setReminder(task.id, null);
@@ -78,8 +84,6 @@ export function TaskSheet({ taskId, onClose }: { taskId: string | null; onClose:
   };
 
   const [h, m] = (task.remindAt ?? '09:00').split(':').map(Number);
-  const timeValue = new Date();
-  timeValue.setHours(h, m, 0, 0);
   const passed = task.remindAt !== null && atTime(task.day, task.remindAt) <= Date.now();
 
   return (
@@ -132,7 +136,7 @@ export function TaskSheet({ taskId, onClose }: { taskId: string | null; onClose:
               {task.remindAt !== null && (
                 <>
                   <Pressable
-                    onPress={() => setShowTime(s => (Platform.OS === 'ios' ? !s : true))}
+                    onPress={() => setShowTime(s => (Platform.OS === 'android' ? true : !s))}
                     style={{ backgroundColor: t.raised, padding: space(1.5), alignItems: 'center' }}
                   >
                     <Text style={{ color: t.accent, fontSize: 22, fontWeight: '700' }}>
@@ -142,16 +146,11 @@ export function TaskSheet({ taskId, onClose }: { taskId: string | null; onClose:
                   </Pressable>
                   {passed && <Muted style={{ fontSize: 12 }}>That time has already passed.</Muted>}
                   {showTime && (
-                    <DateTimePicker
-                      value={timeValue}
-                      mode="time"
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={(e, date) => {
-                        if (Platform.OS !== 'ios') setShowTime(false);
-                        if (e.type === 'set' && date) {
-                          setReminder(task.id, `${pad(date.getHours())}:${pad(date.getMinutes())}`);
-                        }
-                      }}
+                    <TimePicker
+                      hour={h}
+                      minute={m}
+                      onChange={(hh, mm) => setReminder(task.id, `${pad(hh)}:${pad(mm)}`)}
+                      onClose={() => setShowTime(false)}
                     />
                   )}
                 </>
@@ -159,6 +158,9 @@ export function TaskSheet({ taskId, onClose }: { taskId: string | null; onClose:
             </View>
 
             <AccentButton label="Done" onPress={onClose} />
+            <Pressable onPress={remove} style={{ alignItems: 'center', paddingVertical: space(1) }}>
+              <Text style={{ color: DANGER, fontSize: 13 }}>Delete task</Text>
+            </Pressable>
           </ScrollView>
         </Pressable>
       </Pressable>

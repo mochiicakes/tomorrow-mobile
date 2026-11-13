@@ -2,11 +2,11 @@ import React, {
   createContext, useContext, useEffect, useMemo, useRef, useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, AppState, Linking } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { todayKey, tomorrowKey, msUntilMidnight, atTime } from './dates';
 import {
-  scheduleDailyNudge, scheduleTaskReminders, requestPermission, nativeAlarmsAvailable,
+  scheduleDailyNudge, scheduleTaskReminders, requestPermission, nativeAlarmsAvailable, openAppSettings,
   type NudgeResult, type Reminder,
 } from './notifications';
 import { configureNativeSpotify, MIN_CLIP_MS, MAX_CLIP_MS } from './spotify';
@@ -232,7 +232,7 @@ function explainBlocked(result: NudgeResult, what: 'nudge' | 'reminders' = 'nudg
       : 'Tomorrow needs permission to ring task reminders. You can turn it on in Settings.',
     [
       { text: 'Not now', style: 'cancel' },
-      { text: 'Open Settings', onPress: () => Linking.openSettings().catch(() => {}) },
+      { text: 'Open Settings', onPress: openAppSettings },
     ],
   );
 }

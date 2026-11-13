@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.mochiicakes.tomorrow",
@@ -18,7 +17,6 @@
     },
     "android": {
       "package": "com.mochiicakes.tomorrow",
-      "edgeToEdgeEnabled": true,
       "allowBackup": false,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -56,13 +54,14 @@
       "@react-native-community/datetimepicker",
       "expo-font",
       "expo-secure-store",
-      "./modules/tomorrow-alarm/app.plugin.js"
+      "./modules/tomorrow-alarm/app.plugin.js",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
-      "spotifyClientId": "",
+      "spotifyClientId": "770da0762d674d1a9a7bdfb259d4813e",
       "router": {},
       "eas": {
         "projectId": "aecd429c-7f7d-40d0-bc53-f37cf92d3dd8"

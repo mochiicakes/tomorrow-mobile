@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable, ScrollView, Switch, Platform, Linking } from 'react-native';
+import { View, Pressable, ScrollView, Switch, Platform } from 'react-native';
 import { DANGER } from '../../src/toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { TimePicker } from '../../src/TimePicker';
 import { Screen, Title, Muted, Card, AccentButton } from '../../src/ui';
 import { Cat } from '../../src/Cat';
 import { useStore } from '../../src/store';
@@ -11,7 +11,9 @@ import { SKINS, COAT_GROUPS, buildTheme, useTheme, space, radius, customSkinId }
 import { formatTime } from '../../src/dates';
 import { Text } from '../../src/Txt';
 import { collectDiagnostics, type Diagnostics } from '../../src/diagnostics';
-import { sendTestNotification, notificationsAvailable, nativeAlarmsAvailable } from '../../src/notifications';
+import {
+  sendTestNotification, notificationsAvailable, nativeAlarmsAvailable, openAppSettings,
+} from '../../src/notifications';
 import { AccountPanel } from '../../src/AccountPanel';
 
 export default function CatScreen() {
@@ -25,12 +27,6 @@ export default function CatScreen() {
     if (!__DEV__) return;
     collectDiagnostics().then(setDiag);
   }, [settings.hour, settings.minute, settings.notificationsOn]);
-
-  const timeValue = (() => {
-    const d = new Date();
-    d.setHours(settings.hour, settings.minute, 0, 0);
-    return d;
-  })();
 
   return (
     <Screen>
@@ -142,7 +138,7 @@ export default function CatScreen() {
           </View>
           <Muted>The cat asks about tomorrow at this time, every day.</Muted>
           {settings.notificationsOn && (nudgeStatus === 'denied' || nudgeStatus === 'blocked') && (
-            <Pressable onPress={() => Linking.openSettings().catch(() => {})}>
+            <Pressable onPress={openAppSettings}>
               <Text style={{ color: DANGER, fontSize: 12 }}>
                 Notifications are blocked for Tomorrow, so the nudge can't ring. Tap to open Settings.
               </Text>
@@ -168,19 +164,17 @@ export default function CatScreen() {
           </Pressable>
 
           {showPicker && (
-            <DateTimePicker
-              value={timeValue}
-              mode="time"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={(_, date) => {
-                if (Platform.OS !== 'ios') setShowPicker(false);
-                if (date) updateSettings({ hour: date.getHours(), minute: date.getMinutes() });
-              }}
+            <TimePicker
+              hour={settings.hour}
+              minute={settings.minute}
+              onChange={(hour, minute) => updateSettings({ hour, minute })}
+              onClose={() => setShowPicker(false)}
             />
           )}
 
-          {/* alarm sound - Spotify clips ring through the Android alarm service */}
-          {nativeAlarmsAvailable && (
+          {/* alarm sound - Spotify clips ring through the Android alarm service;
+              shown on web too so the setting is discoverable */}
+          {(nativeAlarmsAvailable || Platform.OS === 'web') && (
             <Pressable
               onPress={() => router.push('/alarm-sound')}
               accessibilityRole="button"

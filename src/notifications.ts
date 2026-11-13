@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { warn } from './log';
 import TomorrowAlarm from '../modules/tomorrow-alarm';
@@ -91,6 +91,12 @@ export async function sendTestNotification(seconds = 10): Promise<boolean> {
     },
   });
   return true;
+}
+
+// settings - the app's system settings page; web has none
+export function openAppSettings() {
+  if (Platform.OS === 'web') return;
+  Linking.openSettings().catch(() => {});
 }
 
 // permission

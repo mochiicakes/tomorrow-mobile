@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Pressable, ScrollView, Image, AppState, Keyboard } from 'react-native';
+import { View, Pressable, ScrollView, Image, AppState, Keyboard, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen, Title, Muted, Card, Field, AccentButton, GhostButton } from '../src/ui';
@@ -166,7 +166,9 @@ export default function AlarmSoundScreen() {
                 ? 'Install the Spotify app and sign in to use a song as your alarm.'
                 : status === 'unconfigured'
                   ? 'This build has no Spotify client ID set.'
-                  : 'Song alarms need the Android app.'}
+                  : Platform.OS === 'web'
+                    ? 'Song alarms ring through the Spotify app on Android. Set one from the Tomorrow app on your phone.'
+                    : 'Song alarms need the Android build of Tomorrow.'}
             </Muted>
           </Card>
         )}
