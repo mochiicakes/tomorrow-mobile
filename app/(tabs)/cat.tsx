@@ -1,22 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { View, Pressable, ScrollView, Switch, Platform, Linking } from 'react-native';
+import { View, Pressable, ScrollView, Switch, Platform } from 'react-native';
 import { DANGER } from '../../src/toast';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { TimePicker } from '../../src/TimePicker';
 import { Screen, Title, Muted, Card, AccentButton } from '../../src/ui';
 import { Cat } from '../../src/Cat';
 import { useStore } from '../../src/store';
-import { SKINS, COAT_GROUPS, buildTheme, useTheme, space, radius } from '../../src/theme';
+import { router } from 'expo-router';
+import { SKINS, COAT_GROUPS, buildTheme, useTheme, space, radius, customSkinId } from '../../src/theme';
 import { formatTime } from '../../src/dates';
 import { Text } from '../../src/Txt';
 import { collectDiagnostics, type Diagnostics } from '../../src/diagnostics';
-import { sendTestNotification, notificationsAvailable } from '../../src/notifications';
+import {
+  sendTestNotification, notificationsAvailable, nativeAlarmsAvailable, openAppSettings,
+} from '../../src/notifications';
 import { AccountPanel } from '../../src/AccountPanel';
 
 export default function CatScreen() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings, enableNudge, forcePrompt, nudgeStatus } = useStore();
+  const { settings, customCats, updateSettings, enableNudge, forcePrompt, nudgeStatus } = useStore();
   const [showPicker, setShowPicker] = useState(Platform.OS === 'ios');
   const [diag, setDiag] = useState<Diagnostics | null>(null);
 
@@ -24,12 +27,6 @@ export default function CatScreen() {
     if (!__DEV__) return;
     collectDiagnostics().then(setDiag);
   }, [settings.hour, settings.minute, settings.notificationsOn]);
-
-  const timeValue = (() => {
-    const d = new Date();
-    d.setHours(settings.hour, settings.minute, 0, 0);
-    return d;
-  })();
 
   return (
     <Screen>
@@ -45,15 +42,64 @@ export default function CatScreen() {
         <View style={{ alignItems: 'center', paddingVertical: space(2) }}>
           <Cat size={190} coat={t.coat} eye={t.accent} pattern={t.pattern} marks={t.marks} />
           <Text style={{ color: t.accent, fontWeight: '700', fontSize: 18, marginTop: space(1) }}>
-            {SKINS.find(s => s.id === settings.skin)?.label}
+            {t.label}
           </Text>
         </View>
 
-        {/* skins */}
+        {/* coat - new tile first, then the user's cats, then presets */}
         <Card style={{ gap: space(1.5) }}>
           <Text style={{ color: t.text, fontWeight: '700', fontSize: 16 }}>Coat</Text>
-          <Muted>Each cat sets the whole app's colours.</Muted>
+          <Muted>
+            {customCats.length
+              ? "Each cat sets the whole app's colours. Long-press one of yours to edit it."
+              : "Each cat sets the whole app's colours. Tap + to design your own."}
+          </Muted>
           <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
+            <Pressable
+              onPress={() => router.push('/cat-editor')}
+              accessibilityLabel="Design a new cat"
+              style={{ alignItems: 'center', gap: 6, width: 68 }}
+            >
+              <View style={{
+                width: 64, height: 64, borderRadius: 32,
+                alignItems: 'center', justifyContent: 'center',
+                borderWidth: 2, borderStyle: 'dashed', borderColor: t.hairline,
+              }}>
+                <Text style={{ color: t.muted, fontSize: 24 }}>+</Text>
+              </View>
+              <Text style={{ fontSize: 11, color: t.muted }}>New</Text>
+            </Pressable>
+
+            {customCats.map(c => {
+              const skinId = customSkinId(c.id);
+              const active = skinId === settings.skin;
+              const preview = buildTheme(skinId, customCats);
+              const edit = () => router.push({ pathname: '/cat-editor', params: { id: c.id } });
+              return (
+                <Pressable
+                  key={c.id}
+                  onPress={() => (active ? edit() : updateSettings({ skin: skinId }))}
+                  onLongPress={edit}
+                  accessibilityLabel={active ? `Edit ${c.name}` : `Wear ${c.name}`}
+                  accessibilityHint="Long-press to edit"
+                  style={{ alignItems: 'center', gap: 6, width: 68 }}
+                >
+                  <View style={{
+                    width: 64, height: 64, borderRadius: 32,
+                    backgroundColor: preview.bg,
+                    alignItems: 'center', justifyContent: 'center',
+                    borderWidth: active ? 3 : 1,
+                    borderColor: active ? t.accent : t.hairline,
+                  }}>
+                    <Cat size={46} coat={preview.coat} eye={preview.accent} pattern={preview.pattern} marks={preview.marks} />
+                  </View>
+                  <Text numberOfLines={1} style={{ fontSize: 11, color: active ? t.text : t.muted }}>
+                    {c.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+
             {COAT_GROUPS.flatMap(g => SKINS.filter(s => s.group === g)).map(s => {
               const active = s.id === settings.skin;
               const preview = buildTheme(s.id);
@@ -92,7 +138,7 @@ export default function CatScreen() {
           </View>
           <Muted>The cat asks about tomorrow at this time, every day.</Muted>
           {settings.notificationsOn && (nudgeStatus === 'denied' || nudgeStatus === 'blocked') && (
-            <Pressable onPress={() => Linking.openSettings().catch(() => {})}>
+            <Pressable onPress={openAppSettings}>
               <Text style={{ color: DANGER, fontSize: 12 }}>
                 Notifications are blocked for Tomorrow, so the nudge can't ring. Tap to open Settings.
               </Text>
@@ -118,15 +164,35 @@ export default function CatScreen() {
           </Pressable>
 
           {showPicker && (
-            <DateTimePicker
-              value={timeValue}
-              mode="time"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={(_, date) => {
-                if (Platform.OS !== 'ios') setShowPicker(false);
-                if (date) updateSettings({ hour: date.getHours(), minute: date.getMinutes() });
-              }}
+            <TimePicker
+              hour={settings.hour}
+              minute={settings.minute}
+              onChange={(hour, minute) => updateSettings({ hour, minute })}
+              onClose={() => setShowPicker(false)}
             />
+          )}
+
+          {/* alarm sound - Spotify clips ring through the Android alarm service;
+              shown on web too so the setting is discoverable */}
+          {(nativeAlarmsAvailable || Platform.OS === 'web') && (
+            <Pressable
+              onPress={() => router.push('/alarm-sound')}
+              accessibilityRole="button"
+              style={{
+                backgroundColor: t.raised, borderRadius: radius.md, padding: space(2),
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space(1),
+              }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: t.text, fontSize: 14 }}>Alarm sound</Text>
+                <Muted style={{ fontSize: 12 }}>
+                  {settings.alarmSound
+                    ? `${settings.alarmSound.name} · ${((settings.alarmSound.endMs - settings.alarmSound.startMs) / 1000).toFixed(1)}s`
+                    : 'Purr'}
+                </Muted>
+              </View>
+              <Text style={{ color: t.muted, fontSize: 14 }}>{'>'}</Text>
+            </Pressable>
           )}
         </Card>
 

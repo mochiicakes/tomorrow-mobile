@@ -85,7 +85,7 @@ export function GhostButton({ label, onPress, style, disabled }: ButtonProps) {
 }
 
 // input
-export function Field(props: React.ComponentProps<typeof TextInput>) {
+export function Field(props: React.ComponentProps<typeof TextInput> & { ref?: React.Ref<TextInput> }) {
   const t = useTheme();
   return (
     <TextInput

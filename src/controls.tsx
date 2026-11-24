@@ -67,6 +67,29 @@ export function Arrow({
   );
 }
 
+// chip - one choice among a few
+export function ChoiceChip({
+  label, onPress, active = false,
+}: { label: string; onPress: () => void; active?: boolean }) {
+  const t = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={({ pressed }) => ({
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderWidth: 2,
+        borderColor: active ? t.eye : t.hairline,
+        backgroundColor: active ? t.eye : pressed ? t.raised : t.surface,
+      })}
+    >
+      <Text style={{ fontSize: 13, color: active ? t.onAccent : t.text }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 // pager
 export function Pager({
   label, onPrev, onNext, onLabelPress,

@@ -15,6 +15,30 @@ alter table public.tasks drop constraint if exists tasks_text_length;
 alter table public.tasks add constraint tasks_text_length
   check (char_length(text) between 1 and 500);
 
+-- reminder - 'HH:MM' local time on the task's day (matches REMIND_RE in src/store.tsx)
+alter table public.tasks add column if not exists remind_at text;
+alter table public.tasks drop constraint if exists tasks_remind_at_format;
+alter table public.tasks add constraint tasks_remind_at_format
+  check (remind_at is null or remind_at ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$');
+
+-- details - optional notes (matches MAX_DETAILS_LENGTH in src/store.tsx)
+alter table public.tasks add column if not exists details text;
+alter table public.tasks drop constraint if exists tasks_details_length;
+alter table public.tasks add constraint tasks_details_length
+  check (details is null or char_length(details) <= 2000);
+
+-- repeat - a row with repeat_days is a series (0 = Sunday); see src/recurrence.ts.
+-- series_id has no foreign key: a batch can arrive in any order.
+alter table public.tasks add column if not exists repeat_days smallint[];
+alter table public.tasks add column if not exists repeat_until date;
+alter table public.tasks add column if not exists series_id uuid;
+alter table public.tasks add column if not exists occurs_on date;
+alter table public.tasks drop constraint if exists tasks_repeat_days;
+alter table public.tasks add constraint tasks_repeat_days
+  check (repeat_days is null
+    or (cardinality(repeat_days) between 1 and 7
+        and repeat_days <@ array[0,1,2,3,4,5,6]::smallint[]));
+
 create index if not exists tasks_user_day on public.tasks (user_id, day);
 create index if not exists tasks_user_updated on public.tasks (user_id, updated_at);
 
@@ -42,12 +66,55 @@ alter table public.settings add constraint settings_hour_range check (hour betwe
 alter table public.settings drop constraint if exists settings_minute_range;
 alter table public.settings add constraint settings_minute_range check (minute between 0 and 59);
 alter table public.settings drop constraint if exists settings_skin_length;
-alter table public.settings add constraint settings_skin_length check (char_length(skin) between 1 and 40);
+-- 64 fits 'custom:<uuid>' for user-made cats
+alter table public.settings add constraint settings_skin_length check (char_length(skin) between 1 and 64);
 
 alter table public.settings enable row level security;
 
 drop policy if exists "own settings" on public.settings;
 create policy "own settings" on public.settings
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- custom cats - user-designed coats; pixels use the app's PATTERNS grid format
+create table if not exists public.custom_cats (
+  id          uuid primary key,
+  user_id     uuid not null references auth.users on delete cascade,
+  name        text not null,
+  coat        text not null,
+  eye         text not null,
+  backdrop    text not null,
+  pixels      text[] not null,
+  palette     text[] not null default '{}',
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  deleted_at  timestamptz
+);
+
+-- shape guards (match MAX_CAT_NAME / MAX_CAT_COLORS and the 19x21 grid in the app)
+alter table public.custom_cats drop constraint if exists custom_cats_name_length;
+alter table public.custom_cats add constraint custom_cats_name_length
+  check (char_length(name) between 1 and 24);
+alter table public.custom_cats drop constraint if exists custom_cats_colors;
+alter table public.custom_cats add constraint custom_cats_colors
+  check (coat ~ '^#[0-9A-Fa-f]{6}$' and eye ~ '^#[0-9A-Fa-f]{6}$');
+alter table public.custom_cats drop constraint if exists custom_cats_backdrop_length;
+alter table public.custom_cats add constraint custom_cats_backdrop_length
+  check (char_length(backdrop) between 1 and 40);
+alter table public.custom_cats drop constraint if exists custom_cats_pixels_shape;
+alter table public.custom_cats add constraint custom_cats_pixels_shape
+  check (array_length(pixels, 1) = 19);
+alter table public.custom_cats drop constraint if exists custom_cats_palette_size;
+alter table public.custom_cats add constraint custom_cats_palette_size
+  check (coalesce(array_length(palette, 1), 0) <= 10);
+
+create index if not exists custom_cats_user_updated on public.custom_cats (user_id, updated_at);
+
+alter table public.custom_cats enable row level security;
+
+drop policy if exists "own custom_cats" on public.custom_cats;
+create policy "own custom_cats" on public.custom_cats
   for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
@@ -75,6 +142,11 @@ create trigger settings_touch
   before insert or update on public.settings
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists custom_cats_touch on public.custom_cats;
+create trigger custom_cats_touch
+  before insert or update on public.custom_cats
+  for each row execute function public.touch_updated_at();
+
 -- quota - caps rows per user so one account can't fill the database
 create or replace function public.tasks_quota()
 returns trigger
@@ -93,6 +165,26 @@ drop trigger if exists tasks_quota on public.tasks;
 create trigger tasks_quota
   before insert on public.tasks
   for each row execute function public.tasks_quota();
+
+create or replace function public.custom_cats_quota()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  -- upserts fire insert triggers too, so don't count the row being updated
+  if (select count(*) from public.custom_cats
+      where user_id = new.user_id and id <> new.id) >= 100 then
+    raise exception 'custom cat limit reached' using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists custom_cats_quota on public.custom_cats;
+create trigger custom_cats_quota
+  before insert on public.custom_cats
+  for each row execute function public.custom_cats_quota();
 
 -- account deletion - removes the caller; tasks and settings cascade
 create or replace function public.delete_account()

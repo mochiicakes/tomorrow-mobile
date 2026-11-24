@@ -1,5 +1,7 @@
 import React, { createContext, useContext } from 'react';
 import type { PatternId } from './Cat';
+import type { CustomCat } from './store';
+import { contrastOn, isHex, luminance, mix } from './color';
 
 // groups - picker order
 export const COAT_GROUPS = ['solid', 'tabby', 'bicolor', 'tortie', 'pointed', 'longhair'] as const;
@@ -20,7 +22,7 @@ export type CatSkin = {
   coat: string;
   eye: string;
   mouth?: string;
-  pattern?: PatternId;
+  pattern?: PatternId | string[];
   marks?: string[];
   onAccent: string;
   isDark: boolean;
@@ -198,10 +200,75 @@ export const SKINS: CatSkin[] = [
 
 export type Theme = CatSkin & { accent: string };
 
-export function buildTheme(id: string): Theme {
+// backdrops - common web background colours (Tailwind neutrals, 50 tints, 950 shades)
+export const BACKDROPS = [
+  // light neutrals
+  '#FFFFFF', '#F8FAFC', '#F9FAFB', '#FAFAF9', '#F1F5F9', '#F3F4F6', '#F5F5F4', '#E5E7EB',
+  // light tints
+  '#FEF2F2', '#FFF7ED', '#FFFBEB', '#F0FDF4', '#F0FDFA', '#EFF6FF', '#F5F3FF', '#FDF2F8',
+  // dark neutrals
+  '#000000', '#0A0A0A', '#111827', '#18181B', '#1C1917', '#0F172A', '#1E293B', '#374151',
+  // dark tints
+  '#450A0A', '#431407', '#451A03', '#052E16', '#042F2E', '#172554', '#2E1065', '#500724',
+];
+
+type Surfaces = Pick<CatSkin, 'bg' | 'surface' | 'raised' | 'text' | 'muted' | 'hairline' | 'isDark'>;
+
+// surfaces - the rest of the app palette, derived from one background colour
+export function surfacesFor(bg: string): Surfaces {
+  const isDark = luminance(bg) < 0.18;
+  const toward = isDark ? '#FFFFFF' : '#000000';
+  const text = mix(bg, toward, isDark ? 0.92 : 0.9);
+  return {
+    bg,
+    surface: isDark ? mix(bg, '#FFFFFF', 0.06) : mix(bg, '#FFFFFF', 0.7),
+    raised: mix(bg, toward, isDark ? 0.12 : 0.06),
+    hairline: mix(bg, toward, isDark ? 0.18 : 0.12),
+    text,
+    muted: mix(bg, text, 0.55),
+    isDark,
+  };
+}
+
+// a custom cat's backdrop is a hex colour; older cats may still hold a preset skin id
+export function backdropSurfaces(backdrop: string): Surfaces {
+  if (isHex(backdrop)) return surfacesFor(backdrop.toUpperCase());
+  return SKINS.find(s => s.id === backdrop) ?? SKINS[0];
+}
+
+// custom - settings.skin holds 'custom:<uuid>' while a user-made cat is active
+export const CUSTOM_PREFIX = 'custom:';
+export const customSkinId = (catId: string) => CUSTOM_PREFIX + catId;
+
+export function findCustomCat(id: string, customCats: CustomCat[]) {
+  if (!id.startsWith(CUSTOM_PREFIX)) return undefined;
+  const catId = id.slice(CUSTOM_PREFIX.length);
+  return customCats.find(c => c.id === catId);
+}
+
+// a custom cat's surfaces come from its backdrop; the cat drawing and accent are its own
+export function buildTheme(id: string, customCats: CustomCat[] = []): Theme {
+  const cat = findCustomCat(id, customCats);
+  if (cat) {
+    return {
+      ...backdropSurfaces(cat.backdrop),
+      group: 'solid',
+      id,
+      label: cat.name,
+      coat: cat.coat,
+      eye: cat.eye,
+      mouth: undefined,
+      pattern: cat.pixels,
+      marks: cat.palette,
+      onAccent: contrastOn(cat.eye),
+      accent: cat.eye,
+    };
+  }
   const s = SKINS.find(x => x.id === id) ?? SKINS[0];
   return { ...s, accent: s.eye };
 }
+
+export const skinEye = (id: string, customCats: CustomCat[]) => buildTheme(id, customCats).eye;
 
 export const ThemeContext = createContext<Theme>(buildTheme('mono'));
 export const useTheme = () => useContext(ThemeContext);

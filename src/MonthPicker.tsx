@@ -5,7 +5,7 @@ import { Muted } from './ui';
 import { Pager } from './controls';
 import { useStore } from './store';
 import { useTheme, space } from './theme';
-import { dayKey, todayKey } from './dates';
+import { dayKey } from './dates';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -24,6 +24,91 @@ function parseKey(key: string): Date {
   return new Date(y, m - 1, d);
 }
 
+// calendar - month grid with a pager; also used inline by the task sheet
+export function MonthCalendar({
+  selected, min, onPick,
+}: {
+  selected: string;
+  // earliest day that can be picked
+  min?: string;
+  onPick: (key: string) => void;
+}) {
+  const t = useTheme();
+  const { tasksFor, today } = useStore();
+  const [cursor, setCursor] = useState(() => parseKey(selected));
+
+  // follow the selection when it changes from outside
+  useEffect(() => {
+    setCursor(parseKey(selected));
+  }, [selected]);
+
+  const year = cursor.getFullYear();
+  const month = cursor.getMonth();
+  const cells = useMemo(() => monthCells(year, month), [year, month]);
+
+  const shift = (n: number) => setCursor(new Date(year, month + n, 1));
+
+  return (
+    <View style={{ gap: space(1.5) }}>
+      <Pager
+        label={cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+        onPrev={() => shift(-1)}
+        onNext={() => shift(1)}
+      />
+
+      <View style={{ paddingHorizontal: space(2) }}>
+        {/* weekdays */}
+        <View style={{ flexDirection: 'row' }}>
+          {WEEKDAYS.map((w, i) => (
+            <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: t.muted }}>
+              {w}
+            </Text>
+          ))}
+        </View>
+
+        {/* days */}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: space(1) }}>
+          {cells.map((d, i) => {
+            if (!d) return <View key={i} style={{ width: `${100 / 7}%`, aspectRatio: 1 }} />;
+            const key = dayKey(d);
+            const active = key === selected;
+            const isToday = key === today;
+            const past = key < today;
+            const blocked = min !== undefined && key < min;
+            const count = tasksFor(key).length;
+            return (
+              <View key={i} style={{ width: `${100 / 7}%`, aspectRatio: 1, padding: 2 }}>
+                <Pressable
+                  onPress={() => onPick(key)}
+                  disabled={blocked}
+                  style={({ pressed }) => ({
+                    flex: 1,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 2,
+                    borderWidth: 2,
+                    borderColor: active ? t.eye : isToday ? t.text : 'transparent',
+                    backgroundColor: active ? t.eye : pressed ? t.raised : 'transparent',
+                    opacity: blocked ? 0.2 : past && !active ? 0.45 : 1,
+                  })}
+                >
+                  <Text style={{ fontSize: 13, color: active ? t.onAccent : t.text }}>
+                    {d.getDate()}
+                  </Text>
+                  <View style={{
+                    width: 4, height: 4,
+                    backgroundColor: count ? (active ? t.onAccent : t.eye) : 'transparent',
+                  }} />
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // picker
 export function MonthPicker({
   visible, selected, onPick, onClose,
@@ -34,20 +119,7 @@ export function MonthPicker({
   onClose: () => void;
 }) {
   const t = useTheme();
-  const { tasksFor } = useStore();
-  const [cursor, setCursor] = useState(() => parseKey(selected));
-
-  // reopen on the selected month
-  useEffect(() => {
-    if (visible) setCursor(parseKey(selected));
-  }, [visible, selected]);
-
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const cells = useMemo(() => monthCells(year, month), [year, month]);
-  const today = todayKey();
-
-  const shift = (n: number) => setCursor(new Date(year, month + n, 1));
+  const { today } = useStore();
   const pick = (key: string) => { onPick(key); onClose(); };
 
   return (
@@ -67,59 +139,8 @@ export function MonthPicker({
             gap: space(1.5),
           }}
         >
-          <Pager
-            label={cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-            onPrev={() => shift(-1)}
-            onNext={() => shift(1)}
-          />
-
-          <View style={{ paddingHorizontal: space(2) }}>
-            {/* weekdays */}
-            <View style={{ flexDirection: 'row' }}>
-              {WEEKDAYS.map((w, i) => (
-                <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: t.muted }}>
-                  {w}
-                </Text>
-              ))}
-            </View>
-
-            {/* days */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginTop: space(1) }}>
-              {cells.map((d, i) => {
-                if (!d) return <View key={i} style={{ width: `${100 / 7}%`, aspectRatio: 1 }} />;
-                const key = dayKey(d);
-                const active = key === selected;
-                const isToday = key === today;
-                const past = key < today;
-                const count = tasksFor(key).length;
-                return (
-                  <View key={i} style={{ width: `${100 / 7}%`, aspectRatio: 1, padding: 2 }}>
-                    <Pressable
-                      onPress={() => pick(key)}
-                      style={({ pressed }) => ({
-                        flex: 1,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: 2,
-                        borderWidth: 2,
-                        borderColor: active ? t.eye : isToday ? t.text : 'transparent',
-                        backgroundColor: active ? t.eye : pressed ? t.raised : 'transparent',
-                        opacity: past && !active ? 0.45 : 1,
-                      })}
-                    >
-                      <Text style={{ fontSize: 13, color: active ? t.onAccent : t.text }}>
-                        {d.getDate()}
-                      </Text>
-                      <View style={{
-                        width: 4, height: 4,
-                        backgroundColor: count ? (active ? t.onAccent : t.eye) : 'transparent',
-                      }} />
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
+          {/* remounts on open so it starts on the selected month */}
+          {visible && <MonthCalendar selected={selected} onPick={pick} />}
 
           {/* footer */}
           <View style={{

@@ -42,8 +42,8 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 
 // root
 function Themed() {
-  const { settings, ready, forcePrompt } = useStore();
-  const theme = buildTheme(settings.skin);
+  const { settings, customCats, ready, forcePrompt } = useStore();
+  const theme = buildTheme(settings.skin, customCats);
   const [fontsLoaded, fontError] = useFonts({ Silkscreen_400Regular, Silkscreen_700Bold });
 
   useEffect(() => onNudgeTapped(forcePrompt), []);
