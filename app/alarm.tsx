@@ -11,12 +11,12 @@ import TomorrowAlarm from '../modules/tomorrow-alarm';
 // ringing - opened by the native alarm's full-screen intent (or by tapping it)
 export default function AlarmScreen() {
   const t = useTheme();
-  const { forcePrompt, tasks } = useStore();
+  const { forcePrompt, getTask } = useStore();
   const { kind, id, title, body } = useLocalSearchParams<{
     kind?: string; id?: string; title?: string; body?: string;
   }>();
   // prefer the live task text in case it was edited since the alarm was set
-  const text = (kind === 'task' && tasks.find(x => x.id === id)?.text) || body || '';
+  const text = (kind === 'task' && id && getTask(id)?.text) || body || '';
 
   useEffect(() => {
     TomorrowAlarm?.setShowWhenLocked(true);

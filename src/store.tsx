@@ -6,6 +6,12 @@ import { Alert, AppState } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { todayKey, tomorrowKey, msUntilMidnight, atTime } from './dates';
 import {
+  activeSeries, cleanDays, continuations, deleteAll, deleteSpan, editFollowing, editOne, endFollowing,
+  firstMatch, indexTasks, makeSeries, repeatValid, resolve, revert, seriesRange, setUntil, spanDays,
+  tasksOn, touch, upcomingReminders, upsert,
+  type Repeat, type Scope, type Span, type TaskEdit,
+} from './recurrence';
+import {
   scheduleDailyNudge, scheduleTaskReminders, requestPermission, nativeAlarmsAvailable, openAppSettings,
   type NudgeResult, type Reminder,
 } from './notifications';
@@ -25,6 +31,9 @@ const KEY = 'tomorrow.state.v3';
 const CORRUPT = 'tomorrow.state.corrupt';
 const LEGACY_PUSHED = 'tomorrow.pushedAt';
 export const MAX_TASK_LENGTH = 500;
+export const MAX_DETAILS_LENGTH = 2000;
+// days of repeating reminders to schedule ahead
+const REMINDER_WINDOW = 60;
 export const MAX_CAT_NAME = 24;
 export const MAX_CAT_COLORS = 10;
 
@@ -32,10 +41,19 @@ export const MAX_CAT_COLORS = 10;
 export type Task = {
   id: string;
   text: string;
+  // optional notes, '' when empty
+  details: string;
   day: string;
   done: boolean;
   // 'HH:MM' local time on `day`, or null for no reminder
   remindAt: string | null;
+  // set on series rows only: ticked weekdays (0 = Sunday), and the last day if it ends
+  repeatDays: number[] | null;
+  repeatUntil: string | null;
+  // on one day of a series: which series, and the day it stands for (kept when moved).
+  // On a series split off by an edit, seriesId is the series it continues.
+  seriesId: string | null;
+  occursOn: string | null;
   createdAt: number;
   updatedAt: number;
   deletedAt: number | null;
@@ -104,6 +122,8 @@ const DEFAULT: State = {
   settingsDirty: false,
 };
 
+type AddExtra = { details?: string; remindAt?: string | null; repeat?: Repeat | null };
+
 type Store = {
   ready: boolean;
   syncing: boolean;
@@ -117,9 +137,21 @@ type Store = {
   today: string;
   tomorrow: string;
   tasksFor: (day: string) => Task[];
+  getTask: (id: string) => Task | null;
+  seriesFor: (t: Task) => Task | null;
+  // false when a later edit already carries the series on past its end date
+  canExtend: (series: Task) => boolean;
+  // the whole repeating task, across every stretch; last is null if it never ends
+  seriesRange: (series: Task) => { first: string; last: string | null };
+  // unfinished days a span would delete; null = it never ends
+  spanDays: (t: Task, span: Span) => number | null;
   saveCustomCat: (draft: CustomCatDraft) => string;
   deleteCustomCat: (id: string) => void;
-  addTask: (text: string, day: string) => void;
+  // returns the first day it lands on, or null if nothing was added
+  addTask: (text: string, day: string, extra?: AddExtra) => string | null;
+  // both return an undo
+  updateTask: (id: string, e: TaskEdit, scope: Scope) => () => void;
+  deleteTask: (id: string, what: 'one' | 'all' | Span) => () => void;
   toggleTask: (id: string) => void;
   removeTask: (id: string) => void;
   restoreTask: (id: string) => void;
@@ -148,9 +180,14 @@ function sanitizeTasks(raw: unknown, legacy: boolean): Task[] {
     .map(t => ({
       id: t.id!,
       text: t.text!.slice(0, MAX_TASK_LENGTH),
+      details: typeof t.details === 'string' ? t.details.slice(0, MAX_DETAILS_LENGTH) : '',
       day: t.day!,
       done: Boolean(t.done),
       remindAt: typeof t.remindAt === 'string' && REMIND_RE.test(t.remindAt) ? t.remindAt : null,
+      repeatDays: cleanDays(t.repeatDays),
+      repeatUntil: typeof t.repeatUntil === 'string' && DAY_RE.test(t.repeatUntil) ? t.repeatUntil : null,
+      seriesId: typeof t.seriesId === 'string' ? t.seriesId : null,
+      occursOn: typeof t.occursOn === 'string' && DAY_RE.test(t.occursOn) ? t.occursOn : null,
       createdAt: Number(t.createdAt) || Date.now(),
       updatedAt: Number(t.updatedAt ?? t.createdAt) || Date.now(),
       deletedAt: t.deletedAt ?? null,
@@ -311,9 +348,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // reminders - rescheduled only when a reminder-relevant field changes;
   // calls are chained so an older set can never land after a newer one
-  const reminders: Reminder[] = state.tasks
-    .filter(t => t.remindAt && !t.deletedAt && !t.done)
-    .map(t => ({ id: t.id, text: t.text, at: atTime(t.day, t.remindAt!) }));
+  const index = useMemo(() => indexTasks(state.tasks), [state.tasks]);
+  const today = todayKey();
+  const reminders = useMemo<Reminder[]>(() => [
+    ...state.tasks.filter(t => t.remindAt && !t.repeatDays && !t.deletedAt && !t.done),
+    ...upcomingReminders(index, today, REMINDER_WINDOW),
+  ].map(t => ({ id: t.id, text: t.text, at: atTime(t.day, t.remindAt!) })), [state.tasks, index, today]);
   const reminderSig = JSON.stringify(reminders);
   const reminderChain = useRef<Promise<void>>(Promise.resolve());
   useEffect(() => {
@@ -441,14 +481,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       forced || (ready && pastNudgeTime && settings.lastPromptedFor !== todayKey());
 
     const edit = (id: string, patch: (t: Task) => Partial<Task>) =>
-      setState(s => ({
-        ...s,
-        tasks: s.tasks.map(t =>
-          t.id === id
-            ? { ...t, ...patch(t), updatedAt: Date.now(), dirty: true, rejected: undefined }
-            : t,
-        ),
-      }));
+      setState(s => {
+        // an untouched day of a series becomes its own row here
+        const t = resolve(s.tasks, id);
+        return t ? { ...s, tasks: upsert(s.tasks, [touch(t, patch(t), Date.now())]) } : s;
+      });
+
+    // commit - applies changed rows; returns an undo
+    const commit = (changed: Task[]) => {
+      const before = stateRef.current.tasks;
+      setState(s => ({ ...s, tasks: upsert(s.tasks, changed) }));
+      return () => setState(s => ({ ...s, tasks: upsert(s.tasks, revert(before, changed, Date.now())) }));
+    };
+
+    // reminders are saved either way; they ring once permission is granted
+    const askReminderPermission = () => {
+      requestPermission().then(ok => {
+        if (!ok) explainBlocked('blocked', 'reminders');
+      });
+    };
 
     const updateSettings = (patch: Partial<Settings>) =>
       setState(s => ({
@@ -492,26 +543,74 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       today: todayKey(),
       tomorrow: tomorrowKey(),
       tasksFor: day =>
-        live
-          .filter(t => t.day === day)
+        tasksOn(index, day)
           .sort((a, b) => Number(a.done) - Number(b.done) || a.createdAt - b.createdAt),
-      addTask: (text, day) => {
+      getTask: id => {
+        const t = resolve(tasks, id);
+        return t && !t.deletedAt && !t.repeatDays ? t : null;
+      },
+      seriesFor: t => activeSeries(tasks, t),
+      canExtend: series => !continuations(tasks, series).length,
+      seriesRange: series => seriesRange(tasks, series),
+      spanDays: (t, span) => spanDays(tasks, t, span),
+      addTask: (text, day, { details = '', remindAt = null, repeat = null } = {}) => {
         const trimmed = text.trim().slice(0, MAX_TASK_LENGTH);
-        if (!trimmed) return;
+        if (!trimmed || (repeat && !repeatValid(repeat, day))) return null;
+        const start = repeat ? firstMatch(repeat.days, day)! : day;
         const t: Task = {
           id: Crypto.randomUUID(),
           text: trimmed,
-          day,
+          details: details.trim().slice(0, MAX_DETAILS_LENGTH),
+          day: start,
           done: false,
-          remindAt: null,
+          remindAt: remindAt && REMIND_RE.test(remindAt) ? remindAt : null,
+          repeatDays: repeat?.days ?? null,
+          repeatUntil: repeat?.until ?? null,
+          seriesId: null,
+          occursOn: null,
           createdAt: Date.now(),
           updatedAt: Date.now(),
           deletedAt: null,
           dirty: true,
         };
+        if (t.remindAt) askReminderPermission();
         // First task is the moment to ask about the daily nudge.
         if (!tasks.length && settings.notificationsOn) enableNudge();
         setState(s => ({ ...s, tasks: [...s.tasks, t] }));
+        return start;
+      },
+      updateTask: (id, raw, scope) => {
+        const all = stateRef.current.tasks;
+        const t = resolve(all, id);
+        if (!t) return () => {};
+        const e: TaskEdit = {
+          ...raw,
+          ...(raw.text !== undefined && { text: raw.text.trim().slice(0, MAX_TASK_LENGTH) || t.text }),
+          ...(raw.details !== undefined && { details: raw.details.trim().slice(0, MAX_DETAILS_LENGTH) }),
+        };
+        const now = Date.now();
+        const series = activeSeries(all, t);
+        const untilOnly = series && e.repeat && Object.keys(e).length === 1 &&
+          e.repeat.days.join() === series.repeatDays!.join();
+        if (e.remindAt) askReminderPermission();
+
+        if (!series) {
+          return commit(e.repeat ? makeSeries(t, e, e.repeat, Crypto.randomUUID(), now) : editOne(t, e, now));
+        }
+        if (e.repeat === null) return commit(endFollowing(all, t, e, now));
+        if (untilOnly) return commit(setUntil(all, series, e.repeat!.until, now));
+        if (scope === 'following') return commit(editFollowing(all, t, e, Crypto.randomUUID(), now));
+        return commit(editOne(t, e, now));
+      },
+      deleteTask: (id, what) => {
+        const all = stateRef.current.tasks;
+        const t = resolve(all, id);
+        if (!t) return () => {};
+        const now = Date.now();
+        if (what === 'one' || !activeSeries(all, t)) return commit([touch(t, { deletedAt: now }, now)]);
+        return commit(what === 'all'
+          ? deleteAll(all, t, now)
+          : deleteSpan(all, t, what, Crypto.randomUUID(), now));
       },
       toggleTask: id => edit(id, t => ({ done: !t.done })),
       removeTask: id => edit(id, () => ({ deletedAt: Date.now() })),
@@ -522,12 +621,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setReminder: (id, remindAt) => {
         if (remindAt !== null && !REMIND_RE.test(remindAt)) return;
         edit(id, () => ({ remindAt }));
-        // the reminder is saved either way; it rings once permission is granted
-        if (remindAt) {
-          requestPermission().then(ok => {
-            if (!ok) explainBlocked('blocked', 'reminders');
-          });
-        }
+        if (remindAt) askReminderPermission();
       },
       saveCustomCat: draft => {
         const now = Date.now();

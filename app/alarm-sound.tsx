@@ -10,7 +10,7 @@ import { DANGER } from '../src/toast';
 import { ClipPicker, fmtMs } from '../src/ClipPicker';
 import {
   spotifyStatus, isSignedIn, signIn, signOut, connectPlayer, searchTracks,
-  previewClip, stopPreview, type Track,
+  previewClip, stopPreview, type Track, type PlayerResult,
 } from '../src/spotify';
 import TomorrowAlarm from '../modules/tomorrow-alarm';
 
@@ -20,6 +20,23 @@ const DEFAULT_CLIP_MS = 5_000;
 function firstClip(t: Track): Pick<AlarmSound, 'startMs' | 'endMs'> {
   const start = Math.max(0, Math.min(30_000, t.durationMs - DEFAULT_CLIP_MS));
   return { startMs: start, endMs: Math.min(start + DEFAULT_CLIP_MS, t.durationMs) };
+}
+
+const CONNECT_ERRORS: Record<string, string> = {
+  ERR_SPOTIFY_NOT_AUTHORIZED: "Spotify hasn't given Tomorrow access. Open Spotify, then connect again and tap Agree.",
+  ERR_SPOTIFY_LOGGED_OUT: 'Log in to the Spotify app, then try again.',
+  ERR_SPOTIFY_OFFLINE: 'Turn off offline mode in Spotify, then try again.',
+  ERR_SPOTIFY_OUTDATED: 'Update the Spotify app, then try again.',
+  ERR_SPOTIFY_TIMEOUT: "Spotify didn't respond. Open it once, then try again.",
+};
+
+// failures the user can't fix from our wording alone keep Spotify's own message
+function connectError({ code, detail }: Extract<PlayerResult, { status: 'failed' }>): string {
+  if (code && CONNECT_ERRORS[code]) return CONNECT_ERRORS[code];
+  const text = code === 'ERR_SPOTIFY_APP_NOT_REGISTERED'
+    ? "Spotify doesn't recognise this build of Tomorrow."
+    : "Couldn't reach the Spotify app. Open it once, then try again.";
+  return detail ? `${text} (${detail})` : text;
 }
 
 function Back() {
@@ -86,9 +103,9 @@ export default function AlarmSoundScreen() {
         return;
       }
       const player = await connectPlayer();
-      if (player === 'no-premium') setError('Spotify Premium is needed to play a chosen song.');
-      else if (player === 'failed') setError("Couldn't reach the Spotify app. Open it once, then try again.");
-      setConnected(player === 'ok');
+      if (player.status === 'no-premium') setError('Spotify Premium is needed to play a chosen song.');
+      else if (player.status === 'failed') setError(connectError(player));
+      setConnected(player.status === 'ok');
     } finally {
       setBusy(false);
     }

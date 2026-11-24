@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-  Modal, View, Platform, Pressable, ScrollView, Keyboard, LayoutAnimation, Dimensions,
+  Modal, View, Pressable, ScrollView, Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
@@ -9,37 +9,27 @@ import { useTheme, space } from './theme';
 import { AccentButton, Field, Muted } from './ui';
 import { Cat } from './Cat';
 import { prettyDay } from './dates';
+import { TaskExtras } from './TaskExtras';
+import { useKeyboardHeight } from './useKeyboardHeight';
+import { repeatValid, type Repeat } from './recurrence';
+import { DANGER } from './toast';
 import { Text } from '../src/Txt';
 
 // how far the cat pokes out above the sheet
 const CAT_OVERHANG = space(9);
 
-// tracks the on-screen keyboard height (0 when hidden)
-function useKeyboardHeight() {
-  const [height, setHeight] = useState(0);
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const animate = () => LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    // measure from the screen bottom to the keyboard top — on edge-to-edge Android
-    // the reported height leaves out the nav bar sitting under the keyboard
-    const show = Keyboard.addListener(showEvt, e => {
-      animate();
-      const fromBottom = Dimensions.get('screen').height - e.endCoordinates.screenY;
-      setHeight(Math.max(e.endCoordinates.height, fromBottom));
-    });
-    const hide = Keyboard.addListener(hideEvt, () => { animate(); setHeight(0); });
-    return () => { show.remove(); hide.remove(); };
-  }, []);
-  return height;
-}
+type Line = { text: string; details: string; repeat: Repeat | null };
+const BLANK: Line = { text: '', details: '', repeat: null };
 
 // window
 export function TomorrowPrompt() {
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const { shouldPrompt, dismissPrompt, addTask, settings, enableNudge, tomorrow: day } = useStore();
-  const [lines, setLines] = useState<string[]>(['']);
+  const [lines, setLines] = useState<Line[]>([BLANK]);
+  const [error, setError] = useState<string | null>(null);
+  // the line being typed in; only it shows its options, to keep the prompt clean
+  const [active, setActive] = useState<number | null>(null);
   const scroll = useRef<ScrollView>(null);
   const kb = useKeyboardHeight();
   const typing = kb > 0;
@@ -48,17 +38,27 @@ export function TomorrowPrompt() {
 
   if (!shouldPrompt || onAlarm) return null;
 
-  const setLine = (i: number, v: string) =>
-    setLines(ls => ls.map((l, idx) => (idx === i ? v : l)));
+  const setLine = (i: number, patch: Partial<Line>) => {
+    setError(null);
+    setLines(ls => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  };
 
   const addLine = () => {
-    setLines(ls => [...ls, '']);
+    setLines(ls => [...ls, BLANK]);
     requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: true }));
   };
 
   const save = () => {
-    lines.forEach(l => addTask(l, day));
-    setLines(['']);
+    // never drop details or a repeat the user set up
+    if (lines.some(l => !l.text.trim() && (l.details.trim() || l.repeat))) {
+      return setError('Give every task a title first.');
+    }
+    if (lines.some(l => l.repeat && !repeatValid(l.repeat, day))) {
+      return setError('Check the repeat days and end date.');
+    }
+    lines.forEach(l => addTask(l.text, day, { details: l.details, repeat: l.repeat }));
+    setLines([BLANK]);
+    setActive(null);
     Keyboard.dismiss();
     if (settings.notificationsOn) enableNudge();
     dismissPrompt();
@@ -104,17 +104,28 @@ export function TomorrowPrompt() {
             {/* inputs */}
             <View style={{ gap: 10, marginTop: space(1) }}>
               {lines.map((l, i) => (
-                <Field
-                  key={i}
-                  value={l}
-                  onChangeText={v => setLine(i, v)}
-                  placeholder={i === 0 ? 'First thing…' : 'And…'}
-                  maxLength={MAX_TASK_LENGTH}
-                  returnKeyType="next"
-                  autoFocus={i > 0 && i === lines.length - 1}
-                  onSubmitEditing={addLine}
-                  submitBehavior="submit"
-                />
+                <View key={i} style={{ gap: space(1.5), paddingBottom: space(1) }}>
+                  <Field
+                    value={l.text}
+                    onChangeText={v => setLine(i, { text: v })}
+                    placeholder={i === 0 ? 'First thing…' : 'And…'}
+                    maxLength={MAX_TASK_LENGTH}
+                    returnKeyType="next"
+                    autoFocus={i > 0 && i === lines.length - 1}
+                    onFocus={() => setActive(i)}
+                    onSubmitEditing={addLine}
+                    submitBehavior="submit"
+                  />
+                  {((active === i && l.text.trim() !== '') || l.details !== '' || l.repeat !== null) && (
+                    <TaskExtras
+                      day={day}
+                      details={l.details}
+                      repeat={l.repeat}
+                      onDetails={details => setLine(i, { details })}
+                      onRepeat={repeat => { setActive(i); setLine(i, { repeat }); }}
+                    />
+                  )}
+                </View>
               ))}
               <Pressable onPress={addLine} hitSlop={8}>
                 <Text style={{ color: t.accent, fontWeight: '600', paddingVertical: 6 }}>
@@ -126,6 +137,7 @@ export function TomorrowPrompt() {
 
           {/* actions stay pinned under the inputs */}
           <View style={{ gap: space(2), marginTop: space(2), ...(typing && { marginTop: 'auto' }) }}>
+            {error && <Text style={{ color: DANGER, fontSize: 12, textAlign: 'center' }}>{error}</Text>}
             <AccentButton label="That's the plan" onPress={save} />
             {!typing && (
               <Pressable onPress={dismissPrompt} style={{ alignItems: 'center', paddingVertical: 8 }}>

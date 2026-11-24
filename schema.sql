@@ -21,6 +21,24 @@ alter table public.tasks drop constraint if exists tasks_remind_at_format;
 alter table public.tasks add constraint tasks_remind_at_format
   check (remind_at is null or remind_at ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$');
 
+-- details - optional notes (matches MAX_DETAILS_LENGTH in src/store.tsx)
+alter table public.tasks add column if not exists details text;
+alter table public.tasks drop constraint if exists tasks_details_length;
+alter table public.tasks add constraint tasks_details_length
+  check (details is null or char_length(details) <= 2000);
+
+-- repeat - a row with repeat_days is a series (0 = Sunday); see src/recurrence.ts.
+-- series_id has no foreign key: a batch can arrive in any order.
+alter table public.tasks add column if not exists repeat_days smallint[];
+alter table public.tasks add column if not exists repeat_until date;
+alter table public.tasks add column if not exists series_id uuid;
+alter table public.tasks add column if not exists occurs_on date;
+alter table public.tasks drop constraint if exists tasks_repeat_days;
+alter table public.tasks add constraint tasks_repeat_days
+  check (repeat_days is null
+    or (cardinality(repeat_days) between 1 and 7
+        and repeat_days <@ array[0,1,2,3,4,5,6]::smallint[]));
+
 create index if not exists tasks_user_day on public.tasks (user_id, day);
 create index if not exists tasks_user_updated on public.tasks (user_id, updated_at);
 

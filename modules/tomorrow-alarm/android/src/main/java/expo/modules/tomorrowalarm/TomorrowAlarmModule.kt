@@ -31,10 +31,9 @@ class TomorrowAlarmModule : Module() {
     AsyncFunction("spotifyConnect") { promise: Promise ->
       val cfg = AlarmStore.spotify(context)
         ?: return@AsyncFunction promise.reject("ERR_SPOTIFY_CONFIG", "Spotify isn't configured", null)
-      val host = appContext.currentActivity ?: context
-      SpotifyClient.connect(host, cfg, showAuth = true) { err ->
+      SpotifyClient.connect(context, cfg, showAuth = true) { err ->
         if (err == null) promise.resolve(null)
-        else promise.reject("ERR_SPOTIFY_CONNECT", err.message ?: "Couldn't connect to Spotify", err)
+        else promise.reject(SpotifyClient.errorCode(err), err.message ?: "Couldn't connect to Spotify", err)
       }
     }
 

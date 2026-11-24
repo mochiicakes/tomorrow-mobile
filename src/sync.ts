@@ -1,10 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import type { Task, Settings, CustomCat } from './store';
+import { cleanDays } from './recurrence';
 import { warn } from './log';
 
-const CURSOR = 'tomorrow.sync.cursor';
+// v2: older builds pulled rows without details or repeat rules and moved the
+// cursor past them, so the new key forces one full pull
+const CURSOR = 'tomorrow.sync.cursor.v2';
 const CATS_CURSOR = 'tomorrow.sync.cats.cursor';
+// everything an account wipe must clear
+export const CURSOR_KEYS = ['tomorrow.sync.cursor', CURSOR, CATS_CURSOR];
 const PAGE = 1000;
 
 // cursor
@@ -25,9 +30,14 @@ function fromRow(r: any): Task {
   return {
     id: r.id,
     text: r.text,
+    details: r.details ?? '',
     day: r.day,
     done: r.done,
     remindAt: r.remind_at ?? null,
+    repeatDays: cleanDays(r.repeat_days),
+    repeatUntil: r.repeat_until ?? null,
+    seriesId: r.series_id ?? null,
+    occursOn: r.occurs_on ?? null,
     createdAt: new Date(r.created_at).getTime(),
     updatedAt: new Date(r.updated_at).getTime(),
     deletedAt: r.deleted_at ? new Date(r.deleted_at).getTime() : null,
@@ -88,9 +98,14 @@ export function pushTasks(userId: string, tasks: Task[]) {
     id: t.id,
     user_id: userId,
     text: t.text,
+    details: t.details,
     day: t.day,
     done: t.done,
     remind_at: t.remindAt,
+    repeat_days: t.repeatDays,
+    repeat_until: t.repeatUntil,
+    series_id: t.seriesId,
+    occurs_on: t.occursOn,
     created_at: new Date(t.createdAt).toISOString(),
     deleted_at: t.deletedAt ? new Date(t.deletedAt).toISOString() : null,
   }));

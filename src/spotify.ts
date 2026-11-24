@@ -75,6 +75,8 @@ export async function signIn(): Promise<boolean> {
     client_id: CLIENT_ID,
     response_type: 'code',
     redirect_uri: SPOTIFY_REDIRECT,
+    // what App Remote needs; may spare a second consent screen when it connects
+    scope: 'app-remote-control',
     code_challenge_method: 'S256',
     code_challenge: challenge,
     state,
@@ -130,15 +132,21 @@ export async function searchTracks(q: string): Promise<Track[] | null> {
 
 // playback - through the Spotify app
 
-export async function connectPlayer(): Promise<'ok' | 'no-premium' | 'failed'> {
-  if (!TomorrowAlarm) return 'failed';
+export type PlayerResult =
+  | { status: 'ok' | 'no-premium' }
+  // code is one of SpotifyClient.kt's ERR_SPOTIFY_*; detail is Spotify's own message
+  | { status: 'failed'; code?: string; detail?: string };
+
+export async function connectPlayer(): Promise<PlayerResult> {
+  if (!TomorrowAlarm) return { status: 'failed' };
   configureNativeSpotify();
   try {
     await TomorrowAlarm.spotifyConnect();
-    return (await TomorrowAlarm.spotifyCanPlayOnDemand()) ? 'ok' : 'no-premium';
+    return { status: (await TomorrowAlarm.spotifyCanPlayOnDemand()) ? 'ok' : 'no-premium' };
   } catch (e) {
     warn('spotify connect failed', e);
-    return 'failed';
+    const { code, message } = e as { code?: string; message?: string };
+    return { status: 'failed', code, detail: message };
   }
 }
 

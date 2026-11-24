@@ -23,6 +23,19 @@ export function prettyDay(key: string): string {
   });
 }
 
+export function shortDay(key: string): string {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    month: 'short', day: 'numeric',
+    ...(y !== new Date().getFullYear() && { year: 'numeric' }),
+  });
+}
+
+// 0 = Sunday … 6 = Saturday (1 Jan 2023 was a Sunday)
+export function weekdayName(day: number, style: 'short' | 'long' = 'short'): string {
+  return new Date(2023, 0, 1 + day).toLocaleDateString(undefined, { weekday: style });
+}
+
 export function formatTime(hour: number, minute: number): string {
   const d = new Date();
   d.setHours(hour, minute, 0, 0);

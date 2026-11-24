@@ -26,9 +26,11 @@ function parseKey(key: string): Date {
 
 // calendar - month grid with a pager; also used inline by the task sheet
 export function MonthCalendar({
-  selected, onPick,
+  selected, min, onPick,
 }: {
   selected: string;
+  // earliest day that can be picked
+  min?: string;
   onPick: (key: string) => void;
 }) {
   const t = useTheme();
@@ -72,11 +74,13 @@ export function MonthCalendar({
             const active = key === selected;
             const isToday = key === today;
             const past = key < today;
+            const blocked = min !== undefined && key < min;
             const count = tasksFor(key).length;
             return (
               <View key={i} style={{ width: `${100 / 7}%`, aspectRatio: 1, padding: 2 }}>
                 <Pressable
                   onPress={() => onPick(key)}
+                  disabled={blocked}
                   style={({ pressed }) => ({
                     flex: 1,
                     alignItems: 'center',
@@ -85,7 +89,7 @@ export function MonthCalendar({
                     borderWidth: 2,
                     borderColor: active ? t.eye : isToday ? t.text : 'transparent',
                     backgroundColor: active ? t.eye : pressed ? t.raised : 'transparent',
-                    opacity: past && !active ? 0.45 : 1,
+                    opacity: blocked ? 0.2 : past && !active ? 0.45 : 1,
                   })}
                 >
                   <Text style={{ fontSize: 13, color: active ? t.onAccent : t.text }}>

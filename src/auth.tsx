@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Linking from 'expo-linking';
 import { supabase, configured } from './supabase';
 import { showToast } from './toast';
+import { CURSOR_KEYS } from './sync';
 import { warn } from './log';
 
 export type AuthState = {
@@ -37,8 +38,6 @@ const AuthContext = createContext<AuthState>(null as unknown as AuthState);
 export const useAuth = () => useContext(AuthContext);
 
 const LAST_USER = 'tomorrow.lastUserId';
-const CURSOR = 'tomorrow.sync.cursor';
-const CATS_CURSOR = 'tomorrow.sync.cats.cursor';
 const STATE = 'tomorrow.state.v3';
 const PUSHED = 'tomorrow.pushedAt';
 const CALLBACK = 'auth-callback';
@@ -86,7 +85,7 @@ export function friendlyAuthError(e: unknown): string {
 
 // wipe
 async function wipeLocalCache() {
-  await AsyncStorage.multiRemove([STATE, CURSOR, CATS_CURSOR, PUSHED, LAST_USER]);
+  await AsyncStorage.multiRemove([STATE, ...CURSOR_KEYS, PUSHED, LAST_USER]);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
