@@ -25,6 +25,7 @@ import {
 } from './sync';
 import { isHex } from './color';
 import { CAT_GRID_AWAKE } from './Cat';
+import { pendingIntro, markIntroSeen, type Intro } from './intro';
 import { warn } from './log';
 
 const KEY = 'tomorrow.state.v3';
@@ -159,6 +160,9 @@ type Store = {
   setReminder: (id: string, remindAt: string | null) => void;
   updateSettings: (patch: Partial<Settings>) => void;
   enableNudge: (opts?: { explain?: boolean }) => void;
+  // the welcome or what's-new window to show first; the evening prompt waits for it
+  intro: Intro;
+  finishIntro: () => void;
   shouldPrompt: boolean;
   dismissPrompt: () => void;
   forcePrompt: () => void;
@@ -282,6 +286,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [lastSyncError, setLastSyncError] = useState<string | null>(null);
   const [nudgeStatus, setNudgeStatus] = useState<NudgeResult | null>(null);
   const [forced, setForced] = useState(false);
+  const [intro, setIntro] = useState<Intro>(null);
   const [tick, setTick] = useState(0);
   const hydrated = useRef(false);
   const stateRef = useRef(state);
@@ -317,6 +322,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         // Keep the unreadable copy so the next save can't destroy it.
         if (raw) await AsyncStorage.setItem(`${CORRUPT}.${Date.now()}`, raw).catch(() => {});
       } finally {
+        // saved state means an older build ran here: an update, not a new install
+        setIntro(await pendingIntro(raw !== null));
         hydrated.current = true;
         setReady(true);
       }
@@ -478,7 +485,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       now.getHours() > settings.hour ||
       (now.getHours() === settings.hour && now.getMinutes() >= settings.minute);
     const shouldPrompt =
-      forced || (ready && pastNudgeTime && settings.lastPromptedFor !== todayKey());
+      intro === null &&
+      (forced || (ready && pastNudgeTime && settings.lastPromptedFor !== todayKey()));
 
     const edit = (id: string, patch: (t: Task) => Partial<Task>) =>
       setState(s => {
@@ -667,6 +675,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       updateSettings,
       enableNudge,
+      intro,
+      finishIntro: () => {
+        markIntroSeen();
+        setIntro(null);
+      },
       dismissPrompt: () => {
         setForced(false);
         updateSettings({ lastPromptedFor: todayKey() });
@@ -674,7 +687,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       forcePrompt: () => setForced(true),
       syncNow: () => runSync.current(),
     };
-  }, [state, ready, syncing, lastSyncedAt, lastSyncError, nudgeStatus, forced, tick]);
+  }, [state, ready, syncing, lastSyncedAt, lastSyncError, nudgeStatus, forced, intro, tick]);
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>;
 }

@@ -8,6 +8,8 @@ import { StoreProvider, useStore } from '../src/store';
 import { ThemeContext, buildTheme } from '../src/theme';
 import { installNotificationHandler, onNudgeTapped } from '../src/notifications';
 import { TomorrowPrompt } from '../src/TomorrowPrompt';
+import { Welcome } from '../src/Welcome';
+import { WhatsNew } from '../src/WhatsNew';
 import { NewPasswordPrompt } from '../src/NewPasswordPrompt';
 import { ToastHost } from '../src/toast';
 import { warn } from '../src/log';
@@ -56,6 +58,8 @@ function Themed() {
       <StatusBar style={theme.isDark ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false }} />
       <TomorrowPrompt />
+      <Welcome />
+      <WhatsNew />
       <NewPasswordPrompt />
       <ToastHost />
     </ThemeContext.Provider>

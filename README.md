@@ -37,7 +37,12 @@ Every evening, a pixel cat asks what you're doing tomorrow. You write it down, a
 
 - **17 preset coats**, from Mono and Calico to Siamese. Each one recolours the whole app.
 - **Cat editor:** design your own cat pixel by pixel with paint, fill, erase and undo. Choose its fur, eye and background colours, and use up to 10 pattern colours.
-- **Moods:** the cat on the Tomorrow screen falls asleep once you have something planned.
+- **Moods:** the cat on the Tomorrow screen falls asleep once you have something planned. On the Today screen, it sleeps once everything for today is done.
+
+### Welcome and updates
+
+- **Welcome:** the first time you open the app, the cat explains how it works in three short pages.
+- **What's new:** after an update with something to tell, the app shows what changed once.
 
 ### Song alarms (Android, needs Spotify Premium)
 
@@ -182,6 +187,10 @@ For a fork, link your own EAS project and set the same Supabase variables there 
 eas build --platform android --profile preview
 ```
 
+### Release notes
+
+To show the What's new window after an update, change `RELEASE.id` and its notes in [src/intro.ts](src/intro.ts). Keep the same id for a build with nothing new to tell.
+
 ### Checks
 
 ```bash
@@ -200,14 +209,15 @@ npm run typecheck
 
 - [ ] Public sign-in for syncing, coming soon
 
+**Sync handling**
+
+- [ ] Keep unsynced changes when a sign-in expires, and sync them after signing back in to the same account
+- [ ] Tell you when a change can't be synced, instead of only keeping it on the device
+- [ ] Clear out old deleted tasks once they've synced
+
 **Companion**
 
 - [ ] Reminder customisation: personalise what your companion says when it reminds you
-
-**What's new**
-
-- [ ] A window that shows what changed in an update. By default it appears once after the update and not again until the next one
-- [ ] A "Don't show again" option that applies only to that release
 
 **Reminders**
 
